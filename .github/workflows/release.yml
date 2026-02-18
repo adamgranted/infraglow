@@ -20,7 +20,7 @@ jobs:
 
       - name: Verify manifest version matches tag
         run: |
-          MANIFEST_VERSION=$(python3 -c "import json; print(json.load(open('custom_components/wled_visualizer/manifest.json'))['version'])")
+          MANIFEST_VERSION=$(python3 -c "import json; print(json.load(open('custom_components/infraglow/manifest.json'))['version'])")
           TAG_VERSION="${{ steps.version.outputs.version }}"
           if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
             echo "::error::manifest.json version ($MANIFEST_VERSION) does not match tag (v$TAG_VERSION)"

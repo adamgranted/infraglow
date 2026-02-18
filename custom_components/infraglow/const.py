@@ -1,6 +1,6 @@
 """Constants for InfraGlow."""
 
-DOMAIN = "wled_visualizer"
+DOMAIN = "infraglow"
 
 # Config keys
 CONF_WLED_HOST = "wled_host"
@@ -20,6 +20,7 @@ CONF_VIZ_COLOR_HIGH = "color_high"
 CONF_VIZ_COLOR_MID = "color_mid"
 CONF_VIZ_UPDATE_INTERVAL = "update_interval"
 CONF_VIZ_FILL_DIRECTION = "fill_direction"
+CONF_VIZ_INCLUDE_BLACK = "include_black"
 CONF_VIZ_FLASH_COLOR = "flash_color"
 CONF_VIZ_FLASH_SPEED = "flash_speed"
 
@@ -52,7 +53,6 @@ WLED_FX_FIRE_2012 = 66
 WLED_FX_COLORWAVES = 67
 WLED_FX_PALETTE = 65
 WLED_FX_GRADIENT = 46
-WLED_FX_RAINBOW = 9
 WLED_FX_SCAN = 10
 WLED_FX_RUNNING = 15
 
