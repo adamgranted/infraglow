@@ -1,10 +1,10 @@
 <div align="center">
   <a href="https://github.com/adamgranted/infraglow">
-    <img src="" alt="InfraGlow Logo" height="80px" width="80px"/>
+    <img src="custom_components/infraglow/icon@2x.png" alt="InfraGlow Logo" height="80px" width="80px"/>
   </a>
   <h2>InfraGlow</h2>
   <p align="center">
-      <p><b>Real-time infrastructure metrics on WLED LED strips for Home Assistant</b></p>
+      <p><b>Real-time infrastructure metrics on WLED devices for Home Assistant</b></p>
   </p>
 
   <p align="center">
@@ -21,7 +21,7 @@
 
 <br>
 
-InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant sensor data into real-time LED visualizations on [WLED](https://kno.wled.ge/) devices. Point it at a WLED instance, bind entities, and watch your LED strip become a living dashboard for CPU load, temperatures, network throughput, alerts, and more.
+InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant sensor data into real-time LED visualizations on [WLED](https://kno.wled.ge/) devices. Point it at a WLED instance, bind entities, and your LED strip acts as realtime indicator for CPU load, temperatures, network throughput, alerts, and more.
 
 InfraGlow uses WLED's native effect engine for animations. Rather than pushing per-pixel data, it maps sensor values to WLED effect parameters (color, speed, intensity) so you get real movement and smooth transitions while the sensor value drives the look. Designed for square rack perimeter installs but works on any WLED strip.
 
@@ -35,14 +35,18 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 - **Black insertion** — optional toggle to insert black between the two generated palette colors for higher contrast and more dramatic movement
 - **Mirror toggle** — symmetrical animations for rack loop installs
 - **Curated effect list** — only palette-friendly WLED effects are offered (rainbow/pride-style effects that ignore your colors are excluded)
-- **Full UI config** — no YAML required, everything through Home Assistant config flow and options flow
+- **Device page controls** — effect, speed, mirror, and toggle settings are exposed as HA entities on the device page for live tuning
+- **Config subentries** — each visualization is its own subentry with native HA add/edit/delete UI — no clunky options flow menus
+- **Full UI config** — no YAML required, everything through the HA interface
 
 
 ## Installation
 
 ### HACS (Recommended)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=adamgranted&repository=infraglow&category=integration)
+<a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=adamgranted&repository=infraglow&category=integration">
+  <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open your Home Assistant instance and open a repository inside the Home Assistant Community Store." style="height:35px;">
+</a>
 
 1. Open HACS in Home Assistant
 2. Click **Integrations** → **⋮** → **Custom repositories**
@@ -66,18 +70,27 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 
 ### Adding Visualizations
 
-1. Open the integration's **Configure** page
-2. Select **Add a visualization**
+1. Open the InfraGlow integration page under **Settings** → **Devices & Services**
+2. Click **Add visualization** (subentry)
 3. Choose a mode:
    - **System Load** — Breathe effect, 0-100% scale
    - **Temperature** — Gradient effect, 20-90°C scale
    - **Network Throughput** — Running effect, 0-1000 Mbps scale
    - **Alert Flasher** — binary trigger, full-strip override
    - **Grafana / Generic** — Breathe effect, custom floor/ceiling
-4. Select the Home Assistant entity to watch
-5. Set the WLED segment ID and LED count
-6. Pick a WLED effect, adjust colors, speed range, and mirror
-7. Save — repeat for additional segments
+4. Configure: entity, segment, LED count, colors, effect, speed range
+5. Save — the visualization starts immediately
+
+### Tuning from the Device Page
+
+Each visualization creates config entities on the device page:
+
+- **Switches** — Enabled, Mirror, Include Black
+- **Select** — WLED Effect dropdown
+- **Numbers** — Floor, Ceiling, Speed Min, Speed Max
+- **Sensors** (diagnostic) — Current Value, Normalized Level
+
+Changes take effect immediately without reloading.
 
 ### WLED Segment Prep
 
