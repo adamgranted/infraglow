@@ -53,7 +53,7 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 ### Manual
 
 1. Download the latest release from GitHub
-2. Copy the `custom_components/wled_visualizer` folder to your Home Assistant's `config/custom_components/` directory
+2. Copy the `custom_components/infraglow` folder to your Home Assistant's `config/custom_components/` directory
 3. Restart Home Assistant
 
 

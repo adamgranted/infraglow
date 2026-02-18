@@ -1,6 +1,6 @@
 """Constants for InfraGlow."""
 
-DOMAIN = "wled_visualizer"
+DOMAIN = "infraglow"
 
 # Config keys
 CONF_WLED_HOST = "wled_host"

@@ -1,5 +1,5 @@
 {
-  "domain": "wled_visualizer",
+  "domain": "infraglow",
   "name": "InfraGlow",
   "codeowners": [
     "@adamgranted"
