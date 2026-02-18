@@ -29,6 +29,7 @@ from .const import (
     CONF_WLED_HOST,
     CONF_WLED_PORT,
     CONF_VISUALIZATIONS,
+    CONF_VIZ_INCLUDE_BLACK,
     DEFAULT_PORT,
     MODE_SYSTEM_LOAD,
     MODE_TEMPERATURE,
@@ -66,11 +67,9 @@ MODE_SELECT_OPTIONS = [
 EFFECT_SELECT_OPTIONS = [
     {"value": "0", "label": "Solid"},
     {"value": "2", "label": "Breathe"},
-    {"value": "9", "label": "Rainbow"},
     {"value": "10", "label": "Scan"},
     {"value": "15", "label": "Running"},
     {"value": "46", "label": "Gradient"},
-    {"value": "63", "label": "Pride 2015"},
     {"value": "65", "label": "Palette"},
     {"value": "66", "label": "Fire 2012"},
     {"value": "67", "label": "Colorwaves"},
@@ -413,6 +412,7 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
                         )
                     ),
                     vol.Required("mirror", default=False): BooleanSelector(),
+                    vol.Required(CONF_VIZ_INCLUDE_BLACK, default=False): BooleanSelector(),
                     vol.Required("update_interval", default=DEFAULT_EFFECT_UPDATE_INTERVAL): NumberSelector(
                         NumberSelectorConfig(
                             min=0.1, max=10.0, step=0.1,
@@ -475,6 +475,7 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
                     "speed_min": int(user_input.get("speed_min", mode_fx.get("speed_min", 60))),
                     "speed_max": int(user_input.get("speed_max", mode_fx.get("speed_max", 240))),
                     "mirror": bool(user_input.get("mirror", False)),
+                    CONF_VIZ_INCLUDE_BLACK: bool(user_input.get(CONF_VIZ_INCLUDE_BLACK, False)),
                     "update_interval": float(
                         user_input.get("update_interval", DEFAULT_EFFECT_UPDATE_INTERVAL)
                     ),

@@ -21,9 +21,12 @@ from typing import Any
 from .base import BaseRenderer, gradient_color, lerp_color
 
 from ..const import (
+    CONF_VIZ_INCLUDE_BLACK,
     MODE_EFFECT_DEFAULTS,
     WLED_FX_BREATHE,
 )
+
+TUPLE_SPREAD = 0.30
 
 
 @dataclass
@@ -56,6 +59,7 @@ class EffectRenderer(BaseRenderer):
         self._intensity_max: int = config.get("intensity_max", 255)
         self._mirror: bool = config.get("mirror", False)
         self._reverse: bool = config.get("reverse", False)
+        self._include_black: bool = config.get(CONF_VIZ_INCLUDE_BLACK, False)
 
         self._last_state: EffectState | None = None
 
@@ -65,12 +69,16 @@ class EffectRenderer(BaseRenderer):
 
         primary = gradient_color(t, self._color_low, self._color_high, self._color_mid)
 
-        # Build three color stops centered around the current position to
-        # give WLED a cohesive palette around the active value.
-        t_lo = max(0.0, t - 0.15)
-        t_hi = min(1.0, t + 0.15)
-        secondary = gradient_color(t_lo, self._color_low, self._color_high, self._color_mid)
-        tertiary = gradient_color(t_hi, self._color_low, self._color_high, self._color_mid)
+        if self._include_black:
+            t_sec = min(1.0, t + TUPLE_SPREAD)
+            secondary = gradient_color(t_sec, self._color_low, self._color_high, self._color_mid)
+            colors = [list(primary), [0, 0, 0], list(secondary)]
+        else:
+            t_lo = max(0.0, t - TUPLE_SPREAD)
+            t_hi = min(1.0, t + TUPLE_SPREAD)
+            secondary = gradient_color(t_lo, self._color_low, self._color_high, self._color_mid)
+            tertiary = gradient_color(t_hi, self._color_low, self._color_high, self._color_mid)
+            colors = [list(primary), list(secondary), list(tertiary)]
 
         sx = int(self._speed_min + (self._speed_max - self._speed_min) * t)
         ix = int(self._intensity_min + (self._intensity_max - self._intensity_min) * t)
@@ -80,7 +88,7 @@ class EffectRenderer(BaseRenderer):
             pal=self._pal,
             sx=max(0, min(255, sx)),
             ix=max(0, min(255, ix)),
-            colors=[list(primary), list(secondary), list(tertiary)],
+            colors=colors,
             mirror=self._mirror,
             reverse=self._reverse,
         )
@@ -127,4 +135,5 @@ class EffectRenderer(BaseRenderer):
         self._intensity_max = config.get("intensity_max", self._intensity_max)
         self._mirror = config.get("mirror", self._mirror)
         self._reverse = config.get("reverse", self._reverse)
+        self._include_black = config.get(CONF_VIZ_INCLUDE_BLACK, self._include_black)
         self._last_state = None

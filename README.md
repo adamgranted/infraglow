@@ -32,7 +32,9 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 - **Speed mapping** — low sensor values = slow animation, high values = fast; the strip visually reflects intensity
 - **Alert mode** — binary override that takes over the entire strip with pulse/strobe/solid flash styles
 - **Segment support** — run multiple visualizations on different WLED segments of the same strip
+- **Black insertion** — optional toggle to insert black between the two generated palette colors for higher contrast and more dramatic movement
 - **Mirror toggle** — symmetrical animations for rack loop installs
+- **Curated effect list** — only palette-friendly WLED effects are offered (rainbow/pride-style effects that ignore your colors are excluded)
 - **Full UI config** — no YAML required, everything through Home Assistant config flow and options flow
 
 
@@ -103,6 +105,7 @@ Before adding visualizations, configure segments in the WLED web UI:
 | Minimum Speed | Effect speed at the floor value (0-255) | Mode-dependent |
 | Maximum Speed | Effect speed at the ceiling value (0-255) | Mode-dependent |
 | Mirror | Mirror the animation for symmetrical rack loops | Off |
+| Include Black | Insert black between the two palette colors for higher contrast | Off |
 | Update Interval | How often to push updates to WLED | 0.5s |
 
 ### Alert Settings
@@ -119,11 +122,11 @@ When any alert visualization triggers, it overrides the **entire strip** regardl
 
 InfraGlow normalizes your sensor value to a 0.0-1.0 range using the floor/ceiling you set. That normalized value then drives:
 
-- **Color** — picks a position on your low-to-high color gradient. Three color slots (primary + two offset) are sent to WLED so effects that use multiple colors get a cohesive palette around the current value.
+- **Color** — picks a position on your low-to-high color gradient. Three color slots are generated with a wide spread (±30% on the gradient) so effects that use multiple colors show visually distinct movement. If **Include Black** is enabled, the tuple becomes `[primary, black, secondary]` for maximum contrast.
 - **Speed** — linearly maps from your minimum to maximum speed setting. Low temp = gentle movement, high temp = fast.
 - **Intensity** — also scales with the value for effects that use it.
 
-This means your strip shows a single cohesive color that shifts from cool to hot as the sensor changes, while the WLED effect handles all the animation.
+This means your strip shows a cohesive palette that shifts from cool to hot as the sensor changes, with enough spread between the generated colors that WLED effects produce visible movement and contrast.
 
 
 ## Entity Compatibility
