@@ -100,6 +100,54 @@ class WLEDClient:
         }
         await self._send_state(payload)
 
+    async def set_segment_effect(
+        self,
+        segment_id: int,
+        *,
+        fx: int | None = None,
+        pal: int | None = None,
+        sx: int | None = None,
+        ix: int | None = None,
+        colors: list[list[int]] | None = None,
+        mirror: bool | None = None,
+        reverse: bool | None = None,
+    ) -> None:
+        """Set native WLED effect parameters on a segment.
+
+        This lets WLED run its own animation engine while InfraGlow
+        controls which effect, palette, speed, intensity, and colors are
+        active. Much lower bandwidth than per-pixel control and enables
+        real movement.
+
+        Args:
+            segment_id: WLED segment ID.
+            fx: Effect ID (0 = Solid, see WLED effect list).
+            pal: Palette ID.
+            sx: Effect speed (0-255).
+            ix: Effect intensity (0-255).
+            colors: Up to 3 colors as [[R,G,B], [R,G,B], [R,G,B]].
+            mirror: Mirror the segment animation.
+            reverse: Reverse the segment animation direction.
+        """
+        seg: dict[str, Any] = {"id": segment_id}
+        if fx is not None:
+            seg["fx"] = fx
+        if pal is not None:
+            seg["pal"] = pal
+        if sx is not None:
+            seg["sx"] = max(0, min(255, sx))
+        if ix is not None:
+            seg["ix"] = max(0, min(255, ix))
+        if colors is not None:
+            seg["col"] = colors
+        if mirror is not None:
+            seg["mi"] = mirror
+        if reverse is not None:
+            seg["rev"] = reverse
+        # Unfreeze the segment so native effects can run
+        seg["frz"] = False
+        await self._send_state({"seg": [seg]})
+
     async def prepare_for_control(self) -> None:
         """Turn WLED on and disable transitions for per-pixel control.
 

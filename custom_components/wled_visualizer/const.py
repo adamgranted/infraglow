@@ -34,14 +34,34 @@ MODE_GRAFANA = "grafana"
 RENDERER_GAUGE = "gauge"
 RENDERER_FLOW = "flow"
 RENDERER_ALERT = "alert"
+RENDERER_EFFECT = "effect"
 
 # Mode → default renderer mapping
 MODE_RENDERER_MAP = {
-    MODE_SYSTEM_LOAD: RENDERER_GAUGE,
-    MODE_TEMPERATURE: RENDERER_GAUGE,
-    MODE_THROUGHPUT: RENDERER_FLOW,
+    MODE_SYSTEM_LOAD: RENDERER_EFFECT,
+    MODE_TEMPERATURE: RENDERER_EFFECT,
+    MODE_THROUGHPUT: RENDERER_EFFECT,
     MODE_ALERT: RENDERER_ALERT,
-    MODE_GRAFANA: RENDERER_GAUGE,
+    MODE_GRAFANA: RENDERER_EFFECT,
+}
+
+# Well-known WLED effect IDs for mode defaults
+WLED_FX_SOLID = 0
+WLED_FX_BREATHE = 2
+WLED_FX_FIRE_2012 = 66
+WLED_FX_COLORWAVES = 67
+WLED_FX_PALETTE = 65
+WLED_FX_GRADIENT = 46
+WLED_FX_RAINBOW = 9
+WLED_FX_SCAN = 10
+WLED_FX_RUNNING = 15
+
+# Mode-specific default effects
+MODE_EFFECT_DEFAULTS = {
+    MODE_SYSTEM_LOAD: {"fx": WLED_FX_BREATHE, "speed_min": 60, "speed_max": 240},
+    MODE_TEMPERATURE: {"fx": WLED_FX_GRADIENT, "speed_min": 30, "speed_max": 200},
+    MODE_THROUGHPUT: {"fx": WLED_FX_RUNNING, "speed_min": 20, "speed_max": 255},
+    MODE_GRAFANA: {"fx": WLED_FX_BREATHE, "speed_min": 60, "speed_max": 240},
 }
 
 # Fill directions for gauge renderer
@@ -53,6 +73,7 @@ FILL_EDGES_IN = "edges_in"
 # Default values
 DEFAULT_PORT = 80
 DEFAULT_UPDATE_INTERVAL = 1.0  # seconds
+DEFAULT_EFFECT_UPDATE_INTERVAL = 0.5  # seconds — throttle for native effect updates
 DEFAULT_FLOOR = 0.0
 DEFAULT_CEILING = 100.0
 DEFAULT_COLOR_LOW = [0, 255, 0]       # Green
