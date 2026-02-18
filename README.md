@@ -23,20 +23,24 @@
 
 InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant sensor data into real-time LED visualizations on [WLED](https://kno.wled.ge/) devices. Point it at a WLED instance, bind entities, and watch your LED strip become a living dashboard for CPU load, temperatures, network throughput, alerts, and more.
 
+InfraGlow uses WLED's native effect engine for animations. Rather than pushing per-pixel data, it maps sensor values to WLED effect parameters (color, speed, intensity) so you get real movement and smooth transitions while the sensor value drives the look. Designed for square rack perimeter installs but works on any WLED strip.
+
 
 ### Features
-- **Gauge mode** — fill bar visualization with gradient colors for CPU%, RAM%, disk, temperatures
-- **Flow mode** — animated pulses whose speed maps to the sensor value, ideal for network throughput
+- **Native WLED effects** — uses WLED's built-in animations (Breathe, Gradient, Running, Fire, Colorwaves, etc.) for real movement instead of static fills
+- **Value-driven color** — sensor value picks a single color from the low-to-high gradient and maps it to WLED's three color slots for a cohesive palette
+- **Speed mapping** — low sensor values = slow animation, high values = fast; the strip visually reflects intensity
 - **Alert mode** — binary override that takes over the entire strip with pulse/strobe/solid flash styles
 - **Segment support** — run multiple visualizations on different WLED segments of the same strip
-- **Floor/ceiling mapping** — normalizes any value range; low activity shows the bottom of your scale
-- **Three-stop gradients** — optional mid-color for green → yellow → red style ramps
+- **Mirror toggle** — symmetrical animations for rack loop installs
 - **Full UI config** — no YAML required, everything through Home Assistant config flow and options flow
 
 
 ## Installation
 
 ### HACS (Recommended)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=adamgranted&repository=infraglow&category=integration)
 
 1. Open HACS in Home Assistant
 2. Click **Integrations** → **⋮** → **Custom repositories**
@@ -46,8 +50,9 @@ InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant s
 
 ### Manual
 
-1. Copy the `custom_components/wled_visualizer` folder into your Home Assistant `config/custom_components/` directory
-2. Restart Home Assistant
+1. Download the latest release from GitHub
+2. Copy the `custom_components/wled_visualizer` folder to your Home Assistant's `config/custom_components/` directory
+3. Restart Home Assistant
 
 
 ## Setup
@@ -60,16 +65,16 @@ InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant s
 ### Adding Visualizations
 
 1. Open the integration's **Configure** page
-2. Click **➕ Add Visualization**
+2. Select **Add a visualization**
 3. Choose a mode:
-   - **System Load** — gauge, 0-100% scale
-   - **Temperature** — gauge, 20-90°C scale
-   - **Network Throughput** — flow, 0-1000 Mbps scale
-   - **Alert Flasher** — binary trigger
-   - **Grafana / Generic** — gauge, custom floor/ceiling
+   - **System Load** — Breathe effect, 0-100% scale
+   - **Temperature** — Gradient effect, 20-90°C scale
+   - **Network Throughput** — Running effect, 0-1000 Mbps scale
+   - **Alert Flasher** — binary trigger, full-strip override
+   - **Grafana / Generic** — Breathe effect, custom floor/ceiling
 4. Select the Home Assistant entity to watch
 5. Set the WLED segment ID and LED count
-6. Adjust floor, ceiling, colors, and mode-specific settings
+6. Pick a WLED effect, adjust colors, speed range, and mirror
 7. Save — repeat for additional segments
 
 ### WLED Segment Prep
@@ -83,34 +88,42 @@ Before adding visualizations, configure segments in the WLED web UI:
 
 ## Configuration Reference
 
-### Universal Settings
+### Metric Settings (System Load, Temperature, Throughput, Generic)
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Entity | HA entity to watch | (required) |
+| Entity | HA sensor entity to watch | (required) |
 | Segment ID | WLED segment to render on | 0 |
 | Number of LEDs | LED count in this segment | 30 |
-| Floor | Minimum value (maps to 0%) | Mode-dependent |
-| Ceiling | Maximum value (maps to 100%) | Mode-dependent |
-| Low Color | Color at minimum value | `#00FF00` (green) |
-| High Color | Color at maximum value | `#FF0000` (red) |
-| Update Interval | Seconds between updates | 1.0 |
-
-### Gauge Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Fill Direction | Left→Right, Right→Left, Center→Out, Edges→In | Left→Right |
+| Floor | Sensor value that maps to 0% | Mode-dependent |
+| Ceiling | Sensor value that maps to 100% | Mode-dependent |
+| Cool / Low Color | LED color at the floor value | Green |
+| Hot / High Color | LED color at the ceiling value | Red |
+| WLED Effect | Animation effect (Breathe, Gradient, Running, etc.) | Mode-dependent |
+| Minimum Speed | Effect speed at the floor value (0-255) | Mode-dependent |
+| Maximum Speed | Effect speed at the ceiling value (0-255) | Mode-dependent |
+| Mirror | Mirror the animation for symmetrical rack loops | Off |
+| Update Interval | How often to push updates to WLED | 0.5s |
 
 ### Alert Settings
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Flash Color | Color of the alert flash | `#FF0000` (red) |
+| Flash Color | Color of the alert flash | Red |
 | Flash Speed | Pulse frequency in Hz | 2.0 |
 | Flash Style | Smooth Pulse / Hard Strobe / Solid | Pulse |
 
 When any alert visualization triggers, it overrides the **entire strip** regardless of segment assignments. Normal visualizations resume automatically when the alert entity returns to `off`.
+
+### How Value Mapping Works
+
+InfraGlow normalizes your sensor value to a 0.0-1.0 range using the floor/ceiling you set. That normalized value then drives:
+
+- **Color** — picks a position on your low-to-high color gradient. Three color slots (primary + two offset) are sent to WLED so effects that use multiple colors get a cohesive palette around the current value.
+- **Speed** — linearly maps from your minimum to maximum speed setting. Low temp = gentle movement, high temp = fast.
+- **Intensity** — also scales with the value for effects that use it.
+
+This means your strip shows a single cohesive color that shifts from cool to hot as the sensor changes, while the WLED effect handles all the animation.
 
 
 ## Entity Compatibility
@@ -132,27 +145,31 @@ When any alert visualization triggers, it overrides the **entire strip** regardl
 HA Entity States
        │
        ▼
-┌──────────────────────┐
-│  Coordinator         │  Watches entities, runs render loop @ 15fps
-│  ┌────────────────┐  │
-│  │ Gauge Renderer  │──┼──▶ WLED Segment 0  (system load)
-│  │ Flow Renderer   │──┼──▶ WLED Segment 1  (throughput)
-│  │ Gauge Renderer  │──┼──▶ WLED Segment 2  (temperature)
-│  │ Alert Renderer  │──┼──▶ FULL STRIP OVERRIDE (when active)
-│  └────────────────┘  │
-└──────────┬───────────┘
+┌──────────────────────────┐
+│  Coordinator             │  Watches entities, pushes updates
+│  ┌────────────────────┐  │
+│  │ Effect Renderer     │──┼──▶ WLED Segment 0  fx/pal/sx/ix/col
+│  │ Effect Renderer     │──┼──▶ WLED Segment 1  fx/pal/sx/ix/col
+│  │ Effect Renderer     │──┼──▶ WLED Segment 2  fx/pal/sx/ix/col
+│  │ Alert Renderer      │──┼──▶ FULL STRIP OVERRIDE (per-pixel)
+│  └────────────────────┘  │
+└──────────┬───────────────┘
            │
            ▼
      WLED JSON API
      POST /json/state
 ```
 
+Metric visualizations send native WLED effect parameters (~100 bytes per update) instead of per-pixel data (~2.7 KB per frame), reducing bandwidth by ~96% and letting WLED's own animation engine handle rendering.
+
 
 ## Troubleshooting
 
 **LEDs not updating** — check that the WLED device is reachable from your HA instance (HTTP, port 80 default).
 
-**Visualization looks wrong** — verify floor/ceiling values match the entity's actual range. Check the entity state in HA Developer Tools.
+**Colors don't match** — verify floor/ceiling values match the entity's actual range. Check the entity state in HA Developer Tools.
+
+**Effect not animating** — make sure you're not using the Solid effect (ID 0). Try Breathe or Gradient for visible movement.
 
 **Alert won't clear** — ensure the `binary_sensor` entity returns to `off`. Check Developer Tools → States.
 
