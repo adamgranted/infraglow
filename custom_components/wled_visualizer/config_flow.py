@@ -463,16 +463,17 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
         }
 
         if renderer_type == RENDERER_EFFECT:
+            mode_fx = MODE_EFFECT_DEFAULTS.get(mode, {})
             viz_config.update(
                 {
                     "floor": float(user_input.get("floor", defaults.get("floor", 0))),
                     "ceiling": float(user_input.get("ceiling", defaults.get("ceiling", 100))),
                     "color_low": user_input.get("color_low", DEFAULT_COLOR_LOW),
                     "color_high": user_input.get("color_high", DEFAULT_COLOR_HIGH),
-                    "wled_fx": int(user_input.get("wled_fx", WLED_FX_BREATHE)),
+                    "wled_fx": int(user_input.get("wled_fx", mode_fx.get("fx", WLED_FX_BREATHE))),
                     "wled_pal": 0,
-                    "speed_min": int(user_input.get("speed_min", 60)),
-                    "speed_max": int(user_input.get("speed_max", 240)),
+                    "speed_min": int(user_input.get("speed_min", mode_fx.get("speed_min", 60))),
+                    "speed_max": int(user_input.get("speed_max", mode_fx.get("speed_max", 240))),
                     "mirror": bool(user_input.get("mirror", False)),
                     "update_interval": float(
                         user_input.get("update_interval", DEFAULT_EFFECT_UPDATE_INTERVAL)
