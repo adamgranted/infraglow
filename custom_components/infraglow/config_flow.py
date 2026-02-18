@@ -157,10 +157,6 @@ class VizSubentryFlow(ConfigSubentryFlow):
         super().__init__()
         self._mode: str | None = None
 
-    @property
-    def _is_new(self) -> bool:
-        return self.source == "user"
-
     # ── Create: step 1 — pick mode ────────────────────────────────
 
     async def async_step_user(
