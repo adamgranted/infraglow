@@ -1,10 +1,10 @@
 <div align="center">
   <a href="https://github.com/adamgranted/infraglow">
-    <img src="" alt="InfraGlow Logo" height="80px" width="80px"/>
+    <img src="custom_components/infraglow/icon@2x.png" alt="InfraGlow Logo" height="80px" width="80px"/>
   </a>
   <h2>InfraGlow</h2>
   <p align="center">
-      <p><b>Real-time infrastructure metrics on WLED LED strips for Home Assistant</b></p>
+      <p><b>Real-time infrastructure metrics on WLED devices for Home Assistant</b></p>
   </p>
 
   <p align="center">
@@ -21,7 +21,7 @@
 
 <br>
 
-InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant sensor data into real-time LED visualizations on [WLED](https://kno.wled.ge/) devices. Point it at a WLED instance, bind entities, and watch your LED strip become a living dashboard for CPU load, temperatures, network throughput, alerts, and more.
+InfraGlow is a [HACS](https://hacs.xyz/) integration that turns Home Assistant sensor data into real-time LED visualizations on [WLED](https://kno.wled.ge/) devices. Point it at a WLED instance, bind entities, and your LED strip acts as realtime indicator for CPU load, temperatures, network throughput, alerts, and more.
 
 InfraGlow uses WLED's native effect engine for animations. Rather than pushing per-pixel data, it maps sensor values to WLED effect parameters (color, speed, intensity) so you get real movement and smooth transitions while the sensor value drives the look. Designed for square rack perimeter installs but works on any WLED strip.
 
@@ -44,7 +44,9 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 
 ### HACS (Recommended)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=adamgranted&repository=infraglow&category=integration)
+<a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=adamgranted&repository=infraglow&category=integration">
+  <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open your Home Assistant instance and open a repository inside the Home Assistant Community Store." style="height:35px;">
+</a>
 
 1. Open HACS in Home Assistant
 2. Click **Integrations** → **⋮** → **Custom repositories**
