@@ -35,7 +35,9 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 - **Black insertion** — optional toggle to insert black between the two generated palette colors for higher contrast and more dramatic movement
 - **Mirror toggle** — symmetrical animations for rack loop installs
 - **Curated effect list** — only palette-friendly WLED effects are offered (rainbow/pride-style effects that ignore your colors are excluded)
-- **Full UI config** — no YAML required, everything through Home Assistant config flow and options flow
+- **Device page controls** — effect, speed, mirror, and toggle settings are exposed as HA entities on the device page for live tuning
+- **Config subentries** — each visualization is its own subentry with native HA add/edit/delete UI — no clunky options flow menus
+- **Full UI config** — no YAML required, everything through the HA interface
 
 
 ## Installation
@@ -66,18 +68,27 @@ InfraGlow uses WLED's native effect engine for animations. Rather than pushing p
 
 ### Adding Visualizations
 
-1. Open the integration's **Configure** page
-2. Select **Add a visualization**
+1. Open the InfraGlow integration page under **Settings** → **Devices & Services**
+2. Click **Add visualization** (subentry)
 3. Choose a mode:
    - **System Load** — Breathe effect, 0-100% scale
    - **Temperature** — Gradient effect, 20-90°C scale
    - **Network Throughput** — Running effect, 0-1000 Mbps scale
    - **Alert Flasher** — binary trigger, full-strip override
    - **Grafana / Generic** — Breathe effect, custom floor/ceiling
-4. Select the Home Assistant entity to watch
-5. Set the WLED segment ID and LED count
-6. Pick a WLED effect, adjust colors, speed range, and mirror
-7. Save — repeat for additional segments
+4. Configure: entity, segment, LED count, colors, effect, speed range
+5. Save — the visualization starts immediately
+
+### Tuning from the Device Page
+
+Each visualization creates config entities on the device page:
+
+- **Switches** — Enabled, Mirror, Include Black
+- **Select** — WLED Effect dropdown
+- **Numbers** — Floor, Ceiling, Speed Min, Speed Max
+- **Sensors** (diagnostic) — Current Value, Normalized Level
+
+Changes take effect immediately without reloading.
 
 ### WLED Segment Prep
 

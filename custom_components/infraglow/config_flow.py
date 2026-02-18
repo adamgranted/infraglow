@@ -7,7 +7,13 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant import config_entries
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    ConfigSubentryFlow,
+    SubentryFlowResult,
+)
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
@@ -28,7 +34,6 @@ from .const import (
     DOMAIN,
     CONF_WLED_HOST,
     CONF_WLED_PORT,
-    CONF_VISUALIZATIONS,
     CONF_VIZ_INCLUDE_BLACK,
     DEFAULT_PORT,
     MODE_SYSTEM_LOAD,
@@ -41,6 +46,7 @@ from .const import (
     MODE_RENDERER_MAP,
     MODE_DEFAULTS,
     MODE_EFFECT_DEFAULTS,
+    EFFECT_OPTIONS,
     DEFAULT_COLOR_LOW,
     DEFAULT_COLOR_HIGH,
     DEFAULT_FLASH_COLOR,
@@ -63,23 +69,8 @@ MODE_SELECT_OPTIONS = [
     {"value": k, "label": v} for k, v in MODE_LABELS.items()
 ]
 
-# Curated subset of WLED effects that work well for metric visualization
 EFFECT_SELECT_OPTIONS = [
-    {"value": "0", "label": "Solid"},
-    {"value": "2", "label": "Breathe"},
-    {"value": "10", "label": "Scan"},
-    {"value": "15", "label": "Running"},
-    {"value": "46", "label": "Gradient"},
-    {"value": "65", "label": "Palette"},
-    {"value": "66", "label": "Fire 2012"},
-    {"value": "67", "label": "Colorwaves"},
-    {"value": "68", "label": "BPM"},
-    {"value": "69", "label": "Fill Noise"},
-    {"value": "75", "label": "Lake"},
-    {"value": "76", "label": "Meteor"},
-    {"value": "101", "label": "Candle"},
-    {"value": "108", "label": "Phased"},
-    {"value": "110", "label": "Twinklecat"},
+    {"value": str(k), "label": v} for k, v in EFFECT_OPTIONS.items()
 ]
 
 FLASH_STYLE_SELECT_OPTIONS = [
@@ -89,10 +80,10 @@ FLASH_STYLE_SELECT_OPTIONS = [
 ]
 
 
-class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class InfraGlowConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for InfraGlow."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._host: str = ""
@@ -102,7 +93,7 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
+    ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -119,7 +110,7 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if not errors:
                 await self.async_set_unique_id(
-                    f"wled_viz_{self._host}_{self._port}"
+                    f"infraglow_{self._host}_{self._port}"
                 )
                 self._abort_if_unique_id_configured()
 
@@ -131,7 +122,6 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data={
                         CONF_WLED_HOST: self._host,
                         CONF_WLED_PORT: self._port,
-                        CONF_VISUALIZATIONS: [],
                     },
                 )
 
@@ -152,89 +142,37 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    @staticmethod
+    @classmethod
     @callback
-    def async_get_options_flow(
-        config_entry: config_entries.ConfigEntry,
-    ) -> InfraGlowOptionsFlow:
-        return InfraGlowOptionsFlow(config_entry)
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry,
+    ) -> dict[str, type[ConfigSubentryFlow]]:
+        return {"visualization": VizSubentryFlow}
 
 
-class InfraGlowOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow — add/edit/remove visualizations."""
+class VizSubentryFlow(ConfigSubentryFlow):
+    """Flow for creating and editing visualization subentries."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self._config_entry = config_entry
-        self._visualizations: list[dict[str, Any]] = list(
-            config_entry.data.get(CONF_VISUALIZATIONS, [])
-        )
-        self._editing_index: int | None = None
-        self._temp_mode: str | None = None
-        self._next_viz_id: int = self._compute_next_id()
+    def __init__(self) -> None:
+        super().__init__()
+        self._mode: str | None = None
 
-    def _compute_next_id(self) -> int:
-        existing = set()
-        for viz in self._visualizations:
-            vid = viz.get("id", "")
-            if vid.startswith("viz_"):
-                try:
-                    existing.add(int(vid.split("_", 1)[1]))
-                except ValueError:
-                    pass
-        n = 0
-        while n in existing:
-            n += 1
-        return n
+    @property
+    def _is_new(self) -> bool:
+        return self.source == "user"
 
-    # ── Menu ──────────────────────────────────────────────────────
+    # ── Create: step 1 — pick mode ────────────────────────────────
 
-    async def async_step_init(
+    async def async_step_user(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
+    ) -> SubentryFlowResult:
         if user_input is not None:
-            action = user_input.get("action")
-            if action == "add_viz":
-                return await self.async_step_add_viz()
-            if action == "edit_viz":
-                return await self.async_step_edit_viz()
-            if action == "delete_viz":
-                return await self.async_step_delete_viz()
-            if action == "save":
-                return self._save_and_finish()
-
-        options = [{"value": "add_viz", "label": "Add a visualization"}]
-        if self._visualizations:
-            options.append({"value": "edit_viz", "label": "Edit a visualization"})
-            options.append({"value": "delete_viz", "label": "Remove a visualization"})
-        options.append({"value": "save", "label": "Save and close"})
+            self._mode = user_input["mode"]
+            return await self.async_step_configure()
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("action"): SelectSelector(
-                        SelectSelectorConfig(
-                            options=options, mode=SelectSelectorMode.LIST,
-                        )
-                    ),
-                }
-            ),
-        )
-
-    # ── Add ───────────────────────────────────────────────────────
-
-    async def async_step_add_viz(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        if user_input is not None:
-            self._temp_mode = user_input["mode"]
-            self._editing_index = None
-            return await self.async_step_configure_viz()
-
-        return self.async_show_form(
-            step_id="add_viz",
+            step_id="user",
             data_schema=vol.Schema(
                 {
                     vol.Required("mode"): SelectSelector(
@@ -247,267 +185,196 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
             ),
         )
 
-    # ── Edit ──────────────────────────────────────────────────────
+    # ── Create: step 2 — configure parameters ─────────────────────
 
-    async def async_step_edit_viz(
+    async def async_step_configure(
         self,
         user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        if not self._visualizations:
-            return await self.async_step_init()
-
-        if user_input is not None:
-            idx = int(user_input["viz_index"])
-            if 0 <= idx < len(self._visualizations):
-                self._editing_index = idx
-                self._temp_mode = self._visualizations[idx].get("mode", MODE_GRAFANA)
-                return await self.async_step_configure_viz()
-            return await self.async_step_init()
-
-        return self.async_show_form(
-            step_id="edit_viz",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("viz_index"): SelectSelector(
-                        SelectSelectorConfig(
-                            options=self._viz_select_options(),
-                            mode=SelectSelectorMode.LIST,
-                        )
-                    ),
-                }
-            ),
-        )
-
-    # ── Delete ────────────────────────────────────────────────────
-
-    async def async_step_delete_viz(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        if not self._visualizations:
-            return await self.async_step_init()
-
-        if user_input is not None:
-            idx = int(user_input["viz_index"])
-            if 0 <= idx < len(self._visualizations):
-                removed = self._visualizations.pop(idx)
-                _LOGGER.info("Removed visualization '%s'", removed.get("name"))
-            return await self.async_step_init()
-
-        return self.async_show_form(
-            step_id="delete_viz",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("viz_index"): SelectSelector(
-                        SelectSelectorConfig(
-                            options=self._viz_select_options(),
-                            mode=SelectSelectorMode.LIST,
-                        )
-                    ),
-                }
-            ),
-        )
-
-    # ── Configure ─────────────────────────────────────────────────
-
-    async def async_step_configure_viz(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        mode = self._temp_mode
+    ) -> SubentryFlowResult:
+        mode = self._mode
         if mode is None:
-            return await self.async_step_init()
+            return await self.async_step_user()
 
         if user_input is not None:
-            return await self._process_viz_input(user_input, mode)
+            data = _build_subentry_data(user_input, mode)
+            title = user_input.get("name") or MODE_LABELS.get(mode, mode)
+            return self.async_create_entry(title=title, data=data)
 
-        defaults = MODE_DEFAULTS.get(mode, {})
-        renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_EFFECT)
-        schema = self._build_viz_schema(mode, renderer_type, defaults)
-
-        if self._editing_index is not None and self._editing_index < len(self._visualizations):
-            suggested_values = dict(self._visualizations[self._editing_index])
-            if "wled_fx" in suggested_values:
-                suggested_values["wled_fx"] = str(suggested_values["wled_fx"])
-            schema = self.add_suggested_values_to_schema(
-                schema, suggested_values,
-            )
-
+        schema = _build_viz_schema(mode)
         return self.async_show_form(
-            step_id="configure_viz",
+            step_id="configure",
             data_schema=schema,
             description_placeholders={"mode": MODE_LABELS.get(mode, mode)},
         )
 
-    # ── Helpers ───────────────────────────────────────────────────
+    # ── Reconfigure — edit existing subentry ───────────────────────
 
-    def _viz_select_options(self) -> list[dict[str, str]]:
-        options = []
-        for i, viz in enumerate(self._visualizations):
-            name = viz.get("name", f"Visualization {i + 1}")
-            entity = viz.get("entity_id", "")
-            label = f"{name} ({entity})" if entity else name
-            options.append({"value": str(i), "label": label})
-        return options
-
-    def _build_viz_schema(
+    async def async_step_reconfigure(
         self,
-        mode: str,
-        renderer_type: str,
-        defaults: dict[str, Any],
-    ) -> vol.Schema:
-        mode_fx = MODE_EFFECT_DEFAULTS.get(mode, {})
-        default_fx = str(mode_fx.get("fx", WLED_FX_BREATHE))
+        user_input: dict[str, Any] | None = None,
+    ) -> SubentryFlowResult:
+        subentry = self._get_reconfigure_subentry()
+        existing = subentry.data
+        mode = existing.get("mode", MODE_GRAFANA)
 
-        schema_dict: dict[Any, Any] = {
-            vol.Optional("name", default=MODE_LABELS.get(mode, "")): TextSelector(),
-            vol.Required("entity_id"): EntitySelector(
-                EntitySelectorConfig(
-                    domain=(
-                        ["sensor", "binary_sensor"]
-                        if mode == MODE_ALERT
-                        else ["sensor"]
-                    ),
-                )
-            ),
-            vol.Required("segment_id", default=0): NumberSelector(
-                NumberSelectorConfig(
-                    min=0, max=31, step=1, mode=NumberSelectorMode.BOX
-                )
-            ),
-            vol.Required("num_leds", default=30): NumberSelector(
-                NumberSelectorConfig(
-                    min=1, max=1000, step=1, mode=NumberSelectorMode.BOX
-                )
-            ),
-        }
-
-        if renderer_type == RENDERER_EFFECT:
-            schema_dict.update(
-                {
-                    vol.Required("floor", default=float(defaults.get("floor", 0))): NumberSelector(
-                        NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=0.1)
-                    ),
-                    vol.Required("ceiling", default=float(defaults.get("ceiling", 100))): NumberSelector(
-                        NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=0.1)
-                    ),
-                    vol.Required("color_low", default=DEFAULT_COLOR_LOW): ColorRGBSelector(),
-                    vol.Required("color_high", default=DEFAULT_COLOR_HIGH): ColorRGBSelector(),
-                    vol.Required("wled_fx", default=default_fx): SelectSelector(
-                        SelectSelectorConfig(
-                            options=EFFECT_SELECT_OPTIONS,
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Required("speed_min", default=mode_fx.get("speed_min", 60)): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0, max=255, step=1,
-                            mode=NumberSelectorMode.SLIDER,
-                        )
-                    ),
-                    vol.Required("speed_max", default=mode_fx.get("speed_max", 240)): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0, max=255, step=1,
-                            mode=NumberSelectorMode.SLIDER,
-                        )
-                    ),
-                    vol.Required("mirror", default=False): BooleanSelector(),
-                    vol.Required(CONF_VIZ_INCLUDE_BLACK, default=False): BooleanSelector(),
-                    vol.Required("update_interval", default=DEFAULT_EFFECT_UPDATE_INTERVAL): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0.1, max=10.0, step=0.1,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="s",
-                        )
-                    ),
-                }
+        if user_input is not None:
+            data = _build_subentry_data(user_input, mode)
+            return self.async_update_and_abort(
+                self._get_entry(),
+                subentry,
+                data=data,
+                title=user_input.get("name") or subentry.title,
             )
 
-        elif renderer_type == RENDERER_ALERT:
-            schema_dict.update(
-                {
-                    vol.Required("flash_color", default=DEFAULT_FLASH_COLOR): ColorRGBSelector(),
-                    vol.Required("flash_speed", default=2.0): NumberSelector(
-                        NumberSelectorConfig(
-                            min=0.1, max=20.0, step=0.1,
-                            mode=NumberSelectorMode.SLIDER,
-                            unit_of_measurement="Hz",
-                        )
-                    ),
-                    vol.Required("flash_style", default="pulse"): SelectSelector(
-                        SelectSelectorConfig(
-                            options=FLASH_STYLE_SELECT_OPTIONS,
-                            mode=SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
-            )
+        schema = _build_viz_schema(mode)
+        suggested = dict(existing)
+        if "wled_fx" in suggested:
+            suggested["wled_fx"] = str(suggested["wled_fx"])
+        schema = self.add_suggested_values_to_schema(schema, suggested)
 
-        return vol.Schema(schema_dict)
-
-    async def _process_viz_input(
-        self,
-        user_input: dict[str, Any],
-        mode: str,
-    ) -> config_entries.ConfigFlowResult:
-        defaults = MODE_DEFAULTS.get(mode, {})
-        renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_EFFECT)
-
-        viz_config: dict[str, Any] = {
-            "name": user_input.get("name") or MODE_LABELS.get(mode, mode),
-            "mode": mode,
-            "renderer_type": renderer_type,
-            "entity_id": user_input["entity_id"],
-            "segment_id": int(user_input.get("segment_id", 0)),
-            "num_leds": int(user_input.get("num_leds", 30)),
-        }
-
-        if renderer_type == RENDERER_EFFECT:
-            mode_fx = MODE_EFFECT_DEFAULTS.get(mode, {})
-            viz_config.update(
-                {
-                    "floor": float(user_input.get("floor", defaults.get("floor", 0))),
-                    "ceiling": float(user_input.get("ceiling", defaults.get("ceiling", 100))),
-                    "color_low": user_input.get("color_low", DEFAULT_COLOR_LOW),
-                    "color_high": user_input.get("color_high", DEFAULT_COLOR_HIGH),
-                    "wled_fx": int(user_input.get("wled_fx", mode_fx.get("fx", WLED_FX_BREATHE))),
-                    "wled_pal": 0,
-                    "speed_min": int(user_input.get("speed_min", mode_fx.get("speed_min", 60))),
-                    "speed_max": int(user_input.get("speed_max", mode_fx.get("speed_max", 240))),
-                    "mirror": bool(user_input.get("mirror", False)),
-                    CONF_VIZ_INCLUDE_BLACK: bool(user_input.get(CONF_VIZ_INCLUDE_BLACK, False)),
-                    "update_interval": float(
-                        user_input.get("update_interval", DEFAULT_EFFECT_UPDATE_INTERVAL)
-                    ),
-                }
-            )
-
-        elif renderer_type == RENDERER_ALERT:
-            viz_config.update(
-                {
-                    "flash_color": user_input.get("flash_color", DEFAULT_FLASH_COLOR),
-                    "flash_speed": float(user_input.get("flash_speed", 2.0)),
-                    "flash_style": user_input.get("flash_style", "pulse"),
-                }
-            )
-
-        if self._editing_index is not None:
-            viz_config["id"] = self._visualizations[self._editing_index].get(
-                "id", f"viz_{self._next_viz_id}"
-            )
-            self._visualizations[self._editing_index] = viz_config
-            self._editing_index = None
-        else:
-            viz_config["id"] = f"viz_{self._next_viz_id}"
-            self._next_viz_id += 1
-            self._visualizations.append(viz_config)
-
-        return await self.async_step_init()
-
-    def _save_and_finish(self) -> config_entries.ConfigFlowResult:
-        new_data = dict(self._config_entry.data)
-        new_data[CONF_VISUALIZATIONS] = self._visualizations
-        self.hass.config_entries.async_update_entry(
-            self._config_entry, data=new_data,
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=schema,
+            description_placeholders={"mode": MODE_LABELS.get(mode, mode)},
         )
-        return self.async_create_entry(title="", data={})
+
+
+def _build_viz_schema(mode: str) -> vol.Schema:
+    """Build the voluptuous schema for a visualization based on its mode."""
+    renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_EFFECT)
+    defaults = MODE_DEFAULTS.get(mode, {})
+    mode_fx = MODE_EFFECT_DEFAULTS.get(mode, {})
+    default_fx = str(mode_fx.get("fx", WLED_FX_BREATHE))
+
+    schema_dict: dict[Any, Any] = {
+        vol.Optional("name", default=MODE_LABELS.get(mode, "")): TextSelector(),
+        vol.Required("entity_id"): EntitySelector(
+            EntitySelectorConfig(
+                domain=(
+                    ["sensor", "binary_sensor"]
+                    if mode == MODE_ALERT
+                    else ["sensor"]
+                ),
+            )
+        ),
+        vol.Required("segment_id", default=0): NumberSelector(
+            NumberSelectorConfig(
+                min=0, max=31, step=1, mode=NumberSelectorMode.BOX
+            )
+        ),
+        vol.Required("num_leds", default=30): NumberSelector(
+            NumberSelectorConfig(
+                min=1, max=1000, step=1, mode=NumberSelectorMode.BOX
+            )
+        ),
+    }
+
+    if renderer_type == RENDERER_EFFECT:
+        schema_dict.update(
+            {
+                vol.Required("floor", default=float(defaults.get("floor", 0))): NumberSelector(
+                    NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=0.1)
+                ),
+                vol.Required("ceiling", default=float(defaults.get("ceiling", 100))): NumberSelector(
+                    NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=0.1)
+                ),
+                vol.Required("color_low", default=DEFAULT_COLOR_LOW): ColorRGBSelector(),
+                vol.Required("color_high", default=DEFAULT_COLOR_HIGH): ColorRGBSelector(),
+                vol.Required("wled_fx", default=default_fx): SelectSelector(
+                    SelectSelectorConfig(
+                        options=EFFECT_SELECT_OPTIONS,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required("speed_min", default=mode_fx.get("speed_min", 60)): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0, max=255, step=1,
+                        mode=NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Required("speed_max", default=mode_fx.get("speed_max", 240)): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0, max=255, step=1,
+                        mode=NumberSelectorMode.SLIDER,
+                    )
+                ),
+                vol.Required("mirror", default=False): BooleanSelector(),
+                vol.Required(CONF_VIZ_INCLUDE_BLACK, default=False): BooleanSelector(),
+                vol.Required("update_interval", default=DEFAULT_EFFECT_UPDATE_INTERVAL): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0.1, max=10.0, step=0.1,
+                        mode=NumberSelectorMode.BOX,
+                        unit_of_measurement="s",
+                    )
+                ),
+            }
+        )
+
+    elif renderer_type == RENDERER_ALERT:
+        schema_dict.update(
+            {
+                vol.Required("flash_color", default=DEFAULT_FLASH_COLOR): ColorRGBSelector(),
+                vol.Required("flash_speed", default=2.0): NumberSelector(
+                    NumberSelectorConfig(
+                        min=0.1, max=20.0, step=0.1,
+                        mode=NumberSelectorMode.SLIDER,
+                        unit_of_measurement="Hz",
+                    )
+                ),
+                vol.Required("flash_style", default="pulse"): SelectSelector(
+                    SelectSelectorConfig(
+                        options=FLASH_STYLE_SELECT_OPTIONS,
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+
+    return vol.Schema(schema_dict)
+
+
+def _build_subentry_data(user_input: dict[str, Any], mode: str) -> dict[str, Any]:
+    """Normalize and structure user input into subentry data."""
+    renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_EFFECT)
+    defaults = MODE_DEFAULTS.get(mode, {})
+
+    data: dict[str, Any] = {
+        "name": user_input.get("name") or MODE_LABELS.get(mode, mode),
+        "mode": mode,
+        "renderer_type": renderer_type,
+        "entity_id": user_input["entity_id"],
+        "segment_id": int(user_input.get("segment_id", 0)),
+        "num_leds": int(user_input.get("num_leds", 30)),
+        "enabled": True,
+    }
+
+    if renderer_type == RENDERER_EFFECT:
+        mode_fx = MODE_EFFECT_DEFAULTS.get(mode, {})
+        data.update(
+            {
+                "floor": float(user_input.get("floor", defaults.get("floor", 0))),
+                "ceiling": float(user_input.get("ceiling", defaults.get("ceiling", 100))),
+                "color_low": user_input.get("color_low", DEFAULT_COLOR_LOW),
+                "color_high": user_input.get("color_high", DEFAULT_COLOR_HIGH),
+                "wled_fx": int(user_input.get("wled_fx", mode_fx.get("fx", WLED_FX_BREATHE))),
+                "wled_pal": 0,
+                "speed_min": int(user_input.get("speed_min", mode_fx.get("speed_min", 60))),
+                "speed_max": int(user_input.get("speed_max", mode_fx.get("speed_max", 240))),
+                "mirror": bool(user_input.get("mirror", False)),
+                CONF_VIZ_INCLUDE_BLACK: bool(user_input.get(CONF_VIZ_INCLUDE_BLACK, False)),
+                "update_interval": float(
+                    user_input.get("update_interval", DEFAULT_EFFECT_UPDATE_INTERVAL)
+                ),
+            }
+        )
+
+    elif renderer_type == RENDERER_ALERT:
+        data.update(
+            {
+                "flash_color": user_input.get("flash_color", DEFAULT_FLASH_COLOR),
+                "flash_speed": float(user_input.get("flash_speed", 2.0)),
+                "flash_style": user_input.get("flash_style", "pulse"),
+            }
+        )
+
+    return data

@@ -21,77 +21,144 @@
       "already_configured": "This WLED device is already configured."
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "InfraGlow",
-        "description": "Manage your LED visualizations.",
-        "data": {
-          "action": "Action"
-        }
+  "config_subentries": {
+    "visualization": {
+      "initiate_flow": {
+        "user": "Add visualization",
+        "reconfigure": "Edit visualization"
       },
-      "add_viz": {
-        "title": "Add Visualization",
-        "description": "Choose a visualization mode.",
-        "data": {
-          "mode": "Mode"
-        }
-      },
-      "edit_viz": {
-        "title": "Edit Visualization",
-        "description": "Select a visualization to edit.",
-        "data": {
-          "viz_index": "Visualization"
-        }
-      },
-      "delete_viz": {
-        "title": "Remove Visualization",
-        "description": "Select a visualization to remove.",
-        "data": {
-          "viz_index": "Visualization"
-        }
-      },
-      "configure_viz": {
-        "title": "Configure: {mode}",
-        "description": "Set up the visualization parameters.",
-        "data": {
-          "name": "Name",
-          "entity_id": "Entity",
-          "segment_id": "Segment ID",
-          "num_leds": "Number of LEDs",
-          "floor": "Floor value",
-          "ceiling": "Ceiling value",
-          "color_low": "Cool / low color",
-          "color_high": "Hot / high color",
-          "wled_fx": "WLED Effect",
-          "speed_min": "Minimum speed",
-          "speed_max": "Maximum speed",
-          "mirror": "Mirror animation",
-          "include_black": "Include black in palette",
-          "update_interval": "Update interval",
-          "flash_color": "Flash color",
-          "flash_speed": "Flash speed",
-          "flash_style": "Flash style"
+      "step": {
+        "user": {
+          "title": "Add Visualization",
+          "description": "Choose a visualization mode.",
+          "data": {
+            "mode": "Mode"
+          }
         },
-        "data_description": {
-          "name": "A friendly name for this visualization",
-          "entity_id": "The Home Assistant sensor entity to visualize",
-          "segment_id": "WLED segment to render on (set up segments in WLED first)",
-          "num_leds": "How many LEDs are in this segment",
-          "floor": "Sensor value that maps to 0% (cool / low end)",
-          "ceiling": "Sensor value that maps to 100% (hot / high end)",
-          "color_low": "LED color when the sensor is at the floor value",
-          "color_high": "LED color when the sensor is at the ceiling value",
-          "wled_fx": "WLED animation effect — the sensor value drives the color while the effect handles movement",
-          "speed_min": "Effect speed at the floor value (0-255)",
-          "speed_max": "Effect speed at the ceiling value (0-255)",
-          "mirror": "Mirror the animation so it looks symmetrical on a rack loop",
-          "include_black": "Insert black between the two generated colors for higher contrast and more dramatic movement",
-          "update_interval": "How often to push updates to WLED (lower = more responsive)",
-          "flash_color": "Color of the alert flash",
-          "flash_speed": "How fast the alert pulses",
-          "flash_style": "Animation style for the alert"
+        "configure": {
+          "title": "Configure: {mode}",
+          "description": "Set up the visualization parameters.",
+          "data": {
+            "name": "Name",
+            "entity_id": "Entity",
+            "segment_id": "Segment ID",
+            "num_leds": "Number of LEDs",
+            "floor": "Floor value",
+            "ceiling": "Ceiling value",
+            "color_low": "Cool / low color",
+            "color_high": "Hot / high color",
+            "wled_fx": "WLED Effect",
+            "speed_min": "Minimum speed",
+            "speed_max": "Maximum speed",
+            "mirror": "Mirror animation",
+            "include_black": "Include black in palette",
+            "update_interval": "Update interval",
+            "flash_color": "Flash color",
+            "flash_speed": "Flash speed",
+            "flash_style": "Flash style"
+          },
+          "data_description": {
+            "name": "A friendly name for this visualization",
+            "entity_id": "The Home Assistant sensor entity to visualize",
+            "segment_id": "WLED segment to render on (set up segments in WLED first)",
+            "num_leds": "How many LEDs are in this segment",
+            "floor": "Sensor value that maps to 0% (cool / low end)",
+            "ceiling": "Sensor value that maps to 100% (hot / high end)",
+            "color_low": "LED color when the sensor is at the floor value",
+            "color_high": "LED color when the sensor is at the ceiling value",
+            "wled_fx": "WLED animation effect — the sensor value drives the color while the effect handles movement",
+            "speed_min": "Effect speed at the floor value (0-255)",
+            "speed_max": "Effect speed at the ceiling value (0-255)",
+            "mirror": "Mirror the animation so it looks symmetrical on a rack loop",
+            "include_black": "Insert black between the two generated colors for higher contrast and more dramatic movement",
+            "update_interval": "How often to push updates to WLED (lower = more responsive)",
+            "flash_color": "Color of the alert flash",
+            "flash_speed": "How fast the alert pulses",
+            "flash_style": "Animation style for the alert"
+          }
+        },
+        "reconfigure": {
+          "title": "Edit Visualization: {mode}",
+          "description": "Update the visualization parameters.",
+          "data": {
+            "name": "Name",
+            "entity_id": "Entity",
+            "segment_id": "Segment ID",
+            "num_leds": "Number of LEDs",
+            "floor": "Floor value",
+            "ceiling": "Ceiling value",
+            "color_low": "Cool / low color",
+            "color_high": "Hot / high color",
+            "wled_fx": "WLED Effect",
+            "speed_min": "Minimum speed",
+            "speed_max": "Maximum speed",
+            "mirror": "Mirror animation",
+            "include_black": "Include black in palette",
+            "update_interval": "Update interval",
+            "flash_color": "Flash color",
+            "flash_speed": "Flash speed",
+            "flash_style": "Flash style"
+          },
+          "data_description": {
+            "name": "A friendly name for this visualization",
+            "entity_id": "The Home Assistant sensor entity to visualize",
+            "segment_id": "WLED segment to render on (set up segments in WLED first)",
+            "num_leds": "How many LEDs are in this segment",
+            "floor": "Sensor value that maps to 0% (cool / low end)",
+            "ceiling": "Sensor value that maps to 100% (hot / high end)",
+            "color_low": "LED color when the sensor is at the floor value",
+            "color_high": "LED color when the sensor is at the ceiling value",
+            "wled_fx": "WLED animation effect — the sensor value drives the color while the effect handles movement",
+            "speed_min": "Effect speed at the floor value (0-255)",
+            "speed_max": "Effect speed at the ceiling value (0-255)",
+            "mirror": "Mirror the animation so it looks symmetrical on a rack loop",
+            "include_black": "Insert black between the two generated colors for higher contrast and more dramatic movement",
+            "update_interval": "How often to push updates to WLED (lower = more responsive)",
+            "flash_color": "Color of the alert flash",
+            "flash_speed": "How fast the alert pulses",
+            "flash_style": "Animation style for the alert"
+          }
         }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_value": {
+        "name": "Current Value"
+      },
+      "normalized_value": {
+        "name": "Normalized Level"
+      }
+    },
+    "select": {
+      "wled_effect": {
+        "name": "WLED Effect"
+      }
+    },
+    "number": {
+      "floor": {
+        "name": "Floor"
+      },
+      "ceiling": {
+        "name": "Ceiling"
+      },
+      "speed_min": {
+        "name": "Speed Min"
+      },
+      "speed_max": {
+        "name": "Speed Max"
+      }
+    },
+    "switch": {
+      "enabled": {
+        "name": "Enabled"
+      },
+      "mirror": {
+        "name": "Mirror"
+      },
+      "include_black": {
+        "name": "Include Black"
       }
     }
   }

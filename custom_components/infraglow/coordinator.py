@@ -76,11 +76,13 @@ def _parse_entity_value(state: State | None) -> float:
 class VisualizationSlot:
     """A single visualization binding: entity -> renderer -> segment."""
 
-    def __init__(self, viz_id: str, config: dict[str, Any]) -> None:
-        self.viz_id = viz_id
+    def __init__(self, slot_id: str, config: dict[str, Any]) -> None:
+        self.slot_id = slot_id
+        self.config: dict[str, Any] = dict(config)
         self.entity_id: str = config["entity_id"]
         self.segment_id: int = config.get("segment_id", 0)
         self.num_leds: int = config.get("num_leds", 30)
+        self.enabled: bool = config.get("enabled", True)
 
         mode = config.get("mode", "grafana")
         renderer_type = config.get(
@@ -102,6 +104,10 @@ class VisualizationSlot:
                 "update_interval", DEFAULT_UPDATE_INTERVAL
             )
 
+    def normalized_value(self) -> float:
+        """Return the current value normalized to 0.0-1.0 by the renderer."""
+        return self.renderer.normalize(self.current_value)
+
 
 class VisualizationCoordinator:
     """Coordinates all visualizations for a single WLED instance."""
@@ -114,8 +120,8 @@ class VisualizationCoordinator:
     ) -> None:
         self.hass = hass
         self.wled = wled_client
-        self._slots: dict[str, VisualizationSlot] = {}
-        self._alert_slots: dict[str, VisualizationSlot] = {}
+        self.slots: dict[str, VisualizationSlot] = {}
+        self.alert_slots: dict[str, VisualizationSlot] = {}
         self._unsub_listeners: list[Any] = []
         self._render_task: asyncio.Task | None = None
         self._running = False
@@ -145,17 +151,17 @@ class VisualizationCoordinator:
             _LOGGER.warning("Could not prepare WLED for control")
 
         for i, viz_config in enumerate(visualizations):
-            viz_id = viz_config.get("id", f"viz_{i}")
-            slot = VisualizationSlot(viz_id, viz_config)
+            slot_id = viz_config.get("slot_id", f"viz_{i}")
+            slot = VisualizationSlot(slot_id, viz_config)
 
             if slot.renderer_type == RENDERER_ALERT:
-                self._alert_slots[viz_id] = slot
+                self.alert_slots[slot_id] = slot
             else:
-                self._slots[viz_id] = slot
+                self.slots[slot_id] = slot
 
             _LOGGER.info(
                 "Visualization '%s': entity=%s, segment=%d, renderer=%s",
-                viz_id,
+                slot_id,
                 slot.entity_id,
                 slot.segment_id,
                 slot.renderer_type,
@@ -175,8 +181,27 @@ class VisualizationCoordinator:
         self._running = True
         self._render_task = self.hass.async_create_task(self._render_loop())
 
+    def get_slot(self, slot_id: str) -> VisualizationSlot | None:
+        """Get a slot by its ID (subentry ID)."""
+        return self.slots.get(slot_id) or self.alert_slots.get(slot_id)
+
+    def update_slot_param(self, slot_id: str, key: str, value: Any) -> None:
+        """Update a single parameter on a slot's renderer in real-time."""
+        slot = self.get_slot(slot_id)
+        if slot is None:
+            return
+
+        slot.config[key] = value
+
+        if key == "enabled":
+            slot.enabled = bool(value)
+            return
+
+        slot.renderer.update_config(slot.config)
+        _LOGGER.debug("Live-updated '%s'.%s = %s", slot_id, key, value)
+
     def _all_slots(self) -> list[VisualizationSlot]:
-        return list(self._slots.values()) + list(self._alert_slots.values())
+        return list(self.slots.values()) + list(self.alert_slots.values())
 
     @callback
     def _handle_state_change(self, event) -> None:
@@ -196,11 +221,12 @@ class VisualizationCoordinator:
                 now = time.monotonic()
                 timestamp = time.time()
 
-                # --- Alert override check ---
                 alert_active = False
                 alert_frame: list[tuple[int, int, int]] = []
 
-                for slot in self._alert_slots.values():
+                for slot in self.alert_slots.values():
+                    if not slot.enabled:
+                        continue
                     frame = slot.renderer.render(
                         slot.current_value, self._total_leds, timestamp,
                     )
@@ -220,15 +246,14 @@ class VisualizationCoordinator:
                     if self._alert_active:
                         _LOGGER.info("Alert cleared, resuming normal visualizations")
                         self._alert_active = False
-                        # Reset effect renderer state to force re-push after alert
-                        for slot in self._slots.values():
+                        for slot in self.slots.values():
                             if slot.renderer_type == RENDERER_EFFECT:
                                 slot.renderer._last_state = None
 
-                    # --- Normal metric slots ---
-                    for slot in self._slots.values():
-                        # Only throttle non-animated renderers (gauge); flow
-                        # renderers need every frame for smooth animation.
+                    for slot in self.slots.values():
+                        if not slot.enabled:
+                            continue
+
                         if slot.renderer_type == RENDERER_GAUGE:
                             if now - slot.last_update < slot.update_interval:
                                 continue
@@ -276,7 +301,7 @@ class VisualizationCoordinator:
             renderer.accept_state(state)
         except Exception as err:
             _LOGGER.warning(
-                "Failed to push effect for '%s': %s", slot.viz_id, err,
+                "Failed to push effect for '%s': %s", slot.slot_id, err,
             )
 
     async def _push_pixel_slot(
@@ -291,16 +316,8 @@ class VisualizationCoordinator:
             await self.wled.set_segment_colors(slot.segment_id, frame)
         except Exception as err:
             _LOGGER.warning(
-                "Failed to push frame for '%s': %s", slot.viz_id, err,
+                "Failed to push frame for '%s': %s", slot.slot_id, err,
             )
-
-    async def async_update_visualization(
-        self, viz_id: str, config: dict[str, Any],
-    ) -> None:
-        slot = self._slots.get(viz_id) or self._alert_slots.get(viz_id)
-        if slot:
-            slot.renderer.update_config(config)
-            _LOGGER.info("Updated visualization '%s'", viz_id)
 
     async def async_shutdown(self) -> None:
         _LOGGER.info("Shutting down InfraGlow coordinator")
