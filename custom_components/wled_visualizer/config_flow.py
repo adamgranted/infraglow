@@ -5,12 +5,23 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.helpers import selector
+from homeassistant.helpers.selector import (
+    ColorRGBSelector,
+    EntitySelector,
+    EntitySelectorConfig,
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+    TextSelector,
+    TextSelectorConfig,
+)
 
 from .const import (
     DOMAIN,
@@ -24,7 +35,6 @@ from .const import (
     MODE_ALERT,
     MODE_GRAFANA,
     RENDERER_GAUGE,
-    RENDERER_FLOW,
     RENDERER_ALERT,
     MODE_RENDERER_MAP,
     MODE_DEFAULTS,
@@ -41,7 +51,7 @@ from .wled_client import WLEDClient
 
 _LOGGER = logging.getLogger(__name__)
 
-MODE_OPTIONS = {
+MODE_LABELS: dict[str, str] = {
     MODE_SYSTEM_LOAD: "System Load (CPU/RAM/Disk)",
     MODE_TEMPERATURE: "Temperature Sensor",
     MODE_THROUGHPUT: "Network Throughput",
@@ -49,18 +59,22 @@ MODE_OPTIONS = {
     MODE_GRAFANA: "Grafana / Generic Sensor",
 }
 
-FILL_OPTIONS = {
-    FILL_LEFT_TO_RIGHT: "Left → Right",
-    FILL_RIGHT_TO_LEFT: "Right → Left",
-    FILL_CENTER_OUT: "Center → Out",
-    FILL_EDGES_IN: "Edges → In",
-}
+MODE_SELECT_OPTIONS = [
+    {"value": k, "label": v} for k, v in MODE_LABELS.items()
+]
 
-FLASH_STYLE_OPTIONS = {
-    "pulse": "Smooth Pulse",
-    "strobe": "Hard Strobe",
-    "solid": "Solid (no animation)",
-}
+FILL_SELECT_OPTIONS = [
+    {"value": FILL_LEFT_TO_RIGHT, "label": "Left → Right"},
+    {"value": FILL_RIGHT_TO_LEFT, "label": "Right → Left"},
+    {"value": FILL_CENTER_OUT, "label": "Center → Out"},
+    {"value": FILL_EDGES_IN, "label": "Edges → In"},
+]
+
+FLASH_STYLE_SELECT_OPTIONS = [
+    {"value": "pulse", "label": "Smooth Pulse"},
+    {"value": "strobe", "label": "Hard Strobe"},
+    {"value": "solid", "label": "Solid (no animation)"},
+]
 
 
 class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -78,14 +92,13 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Handle the initial step — connect to WLED instance."""
+        """Handle the initial step -- connect to WLED instance."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
             self._host = user_input[CONF_WLED_HOST]
-            self._port = user_input.get(CONF_WLED_PORT, DEFAULT_PORT)
+            self._port = int(user_input.get(CONF_WLED_PORT, DEFAULT_PORT))
 
-            # Test connection
             client = WLEDClient(self._host, self._port)
             try:
                 self._wled_info = await client.get_info()
@@ -95,7 +108,6 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await client.close()
 
             if not errors:
-                # Check if already configured
                 await self.async_set_unique_id(
                     f"wled_viz_{self._host}_{self._port}"
                 )
@@ -117,14 +129,17 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_WLED_HOST): str,
-                    vol.Optional(CONF_WLED_PORT, default=DEFAULT_PORT): int,
+                    vol.Required(CONF_WLED_HOST): TextSelector(
+                        TextSelectorConfig(type="text")
+                    ),
+                    vol.Optional(CONF_WLED_PORT, default=DEFAULT_PORT): NumberSelector(
+                        NumberSelectorConfig(
+                            min=1, max=65535, step=1, mode=NumberSelectorMode.BOX
+                        )
+                    ),
                 }
             ),
             errors=errors,
-            description_placeholders={
-                "info": "Enter the IP address or hostname of your WLED device."
-            },
         )
 
     @staticmethod
@@ -137,7 +152,7 @@ class InfraGlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class InfraGlowOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow — add/edit/remove visualizations."""
+    """Handle options flow -- add/edit/remove visualizations."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
@@ -164,187 +179,290 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
             n += 1
         return n
 
+    # ── Menu ──────────────────────────────────────────────────────
+
     async def async_step_init(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Show the main options menu."""
-        if user_input is not None:
-            action = user_input.get("action")
-            if action == "add":
-                return await self.async_step_add_viz()
-            elif action == "done":
-                return self._save_and_finish()
-            elif action and action.startswith("edit_"):
-                self._editing_index = int(action.split("_")[1])
-                return await self.async_step_edit_viz()
-            elif action and action.startswith("delete_"):
-                idx = int(action.split("_")[1])
-                if 0 <= idx < len(self._visualizations):
-                    self._visualizations.pop(idx)
-                return await self.async_step_init()
+        """Show the main options menu as buttons."""
+        menu_options: list[str] = ["add_viz"]
+        if self._visualizations:
+            menu_options.extend(["edit_viz", "delete_viz"])
+        menu_options.append("save")
 
-        # Build the menu
-        action_options = {"add": "➕ Add Visualization"}
-
-        for i, viz in enumerate(self._visualizations):
-            name = viz.get("name", f"Visualization {i + 1}")
-            mode = MODE_OPTIONS.get(viz.get("mode", ""), viz.get("mode", ""))
-            entity = viz.get("entity_id", "?")
-            action_options[f"edit_{i}"] = f"✏️ {name} ({mode} → {entity})"
-            action_options[f"delete_{i}"] = f"🗑️ Delete: {name}"
-
-        action_options["done"] = "✅ Save & Close"
-
-        return self.async_show_form(
+        return self.async_show_menu(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("action"): vol.In(action_options),
-                }
-            ),
+            menu_options=menu_options,
         )
+
+    async def async_step_save(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Save all changes and close."""
+        return self._save_and_finish()
+
+    # ── Add ───────────────────────────────────────────────────────
 
     async def async_step_add_viz(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Add a new visualization."""
+        """Pick a visualization mode to add."""
         if user_input is not None:
-            mode = user_input["mode"]
-            return await self.async_step_configure_viz(mode=mode)
+            self._temp_mode = user_input["mode"]
+            self._editing_index = None
+            return await self.async_step_configure_viz()
 
         return self.async_show_form(
             step_id="add_viz",
             data_schema=vol.Schema(
                 {
-                    vol.Required("mode"): vol.In(MODE_OPTIONS),
+                    vol.Required("mode"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=MODE_SELECT_OPTIONS,
+                            mode=SelectSelectorMode.LIST,
+                        )
+                    ),
                 }
             ),
         )
 
-    async def async_step_configure_viz(
-        self,
-        user_input: dict[str, Any] | None = None,
-        mode: str | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Configure a visualization's settings."""
-        if mode is None:
-            mode = self._temp_mode
-        if mode is None:
-            return await self.async_step_init()
-
-        if user_input is not None:
-            # Build the visualization config
-            defaults = MODE_DEFAULTS.get(mode, {})
-            renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_GAUGE)
-
-            viz_config = {
-                "name": user_input.get("name", MODE_OPTIONS.get(mode, mode)),
-                "mode": mode,
-                "renderer_type": renderer_type,
-                "entity_id": user_input["entity_id"],
-                "segment_id": user_input.get("segment_id", 0),
-                "num_leds": user_input.get("num_leds", 30),
-                "floor": user_input.get("floor", defaults.get("floor", 0)),
-                "ceiling": user_input.get("ceiling", defaults.get("ceiling", 100)),
-                "update_interval": user_input.get("update_interval", DEFAULT_UPDATE_INTERVAL),
-            }
-
-            # Parse color inputs (hex → RGB list)
-            if "color_low" in user_input:
-                viz_config["color_low"] = _hex_to_rgb(user_input["color_low"])
-            else:
-                viz_config["color_low"] = DEFAULT_COLOR_LOW
-
-            if "color_high" in user_input:
-                viz_config["color_high"] = _hex_to_rgb(user_input["color_high"])
-            else:
-                viz_config["color_high"] = DEFAULT_COLOR_HIGH
-
-            # Mode-specific settings
-            if renderer_type == RENDERER_GAUGE:
-                viz_config["fill_direction"] = user_input.get(
-                    "fill_direction", FILL_LEFT_TO_RIGHT
-                )
-            elif renderer_type == RENDERER_ALERT:
-                if "flash_color" in user_input:
-                    viz_config["flash_color"] = _hex_to_rgb(user_input["flash_color"])
-                else:
-                    viz_config["flash_color"] = DEFAULT_FLASH_COLOR
-                viz_config["flash_speed"] = user_input.get("flash_speed", 2.0)
-                viz_config["flash_style"] = user_input.get("flash_style", "pulse")
-
-            if self._editing_index is not None:
-                self._visualizations[self._editing_index] = viz_config
-                self._editing_index = None
-            else:
-                viz_config["id"] = f"viz_{self._next_viz_id}"
-                self._next_viz_id += 1
-                self._visualizations.append(viz_config)
-
-            return await self.async_step_init()
-
-        # Store mode for when form is submitted
-        self._temp_mode = mode
-        defaults = MODE_DEFAULTS.get(mode, {})
-        renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_GAUGE)
-
-        # Build schema based on mode
-        schema_dict: dict[Any, Any] = {
-            vol.Optional("name", default=MODE_OPTIONS.get(mode, "")): str,
-            vol.Required("entity_id"): selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain=["sensor", "binary_sensor"] if mode == MODE_ALERT else ["sensor"],
-                )
-            ),
-            vol.Optional("segment_id", default=0): vol.All(int, vol.Range(min=0)),
-            vol.Optional("num_leds", default=30): vol.All(int, vol.Range(min=1, max=1000)),
-        }
-
-        if renderer_type != RENDERER_ALERT:
-            schema_dict.update(
-                {
-                    vol.Optional("floor", default=defaults.get("floor", 0)): vol.Coerce(float),
-                    vol.Optional("ceiling", default=defaults.get("ceiling", 100)): vol.Coerce(float),
-                    vol.Optional("color_low", default="#00FF00"): str,
-                    vol.Optional("color_high", default="#FF0000"): str,
-                    vol.Optional("update_interval", default=DEFAULT_UPDATE_INTERVAL): vol.Coerce(float),
-                }
-            )
-
-        if renderer_type == RENDERER_GAUGE:
-            schema_dict[vol.Optional("fill_direction", default=FILL_LEFT_TO_RIGHT)] = vol.In(
-                FILL_OPTIONS
-            )
-
-        if renderer_type == RENDERER_ALERT:
-            schema_dict.update(
-                {
-                    vol.Optional("flash_color", default="#FF0000"): str,
-                    vol.Optional("flash_speed", default=2.0): vol.Coerce(float),
-                    vol.Optional("flash_style", default="pulse"): vol.In(FLASH_STYLE_OPTIONS),
-                }
-            )
-
-        return self.async_show_form(
-            step_id="configure_viz",
-            data_schema=vol.Schema(schema_dict),
-        )
+    # ── Edit ──────────────────────────────────────────────────────
 
     async def async_step_edit_viz(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Edit an existing visualization."""
+        """Pick a visualization to edit."""
+        if not self._visualizations:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            idx = int(user_input["viz_index"])
+            if 0 <= idx < len(self._visualizations):
+                self._editing_index = idx
+                self._temp_mode = self._visualizations[idx].get("mode", MODE_GRAFANA)
+                return await self.async_step_configure_viz()
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="edit_viz",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("viz_index"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=self._viz_select_options(),
+                            mode=SelectSelectorMode.LIST,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    # ── Delete ────────────────────────────────────────────────────
+
+    async def async_step_delete_viz(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Pick a visualization to remove."""
+        if not self._visualizations:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            idx = int(user_input["viz_index"])
+            if 0 <= idx < len(self._visualizations):
+                removed = self._visualizations.pop(idx)
+                _LOGGER.info("Removed visualization '%s'", removed.get("name"))
+            return await self.async_step_init()
+
+        return self.async_show_form(
+            step_id="delete_viz",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("viz_index"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=self._viz_select_options(),
+                            mode=SelectSelectorMode.LIST,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    # ── Configure ─────────────────────────────────────────────────
+
+    async def async_step_configure_viz(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Configure a visualization's settings."""
+        mode = self._temp_mode
+        if mode is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            return await self._process_viz_input(user_input, mode)
+
+        defaults = MODE_DEFAULTS.get(mode, {})
+        renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_GAUGE)
+        schema = self._build_viz_schema(mode, renderer_type, defaults)
+
+        # Pre-populate fields when editing an existing visualization
         if self._editing_index is not None and self._editing_index < len(self._visualizations):
-            viz = self._visualizations[self._editing_index]
-            mode = viz.get("mode", MODE_GRAFANA)
-            return await self.async_step_configure_viz(mode=mode)
+            schema = self.add_suggested_values_to_schema(
+                schema,
+                self._visualizations[self._editing_index],
+            )
+
+        return self.async_show_form(
+            step_id="configure_viz",
+            data_schema=schema,
+            description_placeholders={"mode": MODE_LABELS.get(mode, mode)},
+        )
+
+    # ── Helpers ───────────────────────────────────────────────────
+
+    def _viz_select_options(self) -> list[dict[str, str]]:
+        """Build a list of select options from current visualizations."""
+        options = []
+        for i, viz in enumerate(self._visualizations):
+            name = viz.get("name", f"Visualization {i + 1}")
+            entity = viz.get("entity_id", "")
+            label = f"{name} ({entity})" if entity else name
+            options.append({"value": str(i), "label": label})
+        return options
+
+    def _build_viz_schema(
+        self,
+        mode: str,
+        renderer_type: str,
+        defaults: dict[str, Any],
+    ) -> vol.Schema:
+        """Build the voluptuous schema for a visualization config form."""
+        schema_dict: dict[Any, Any] = {
+            vol.Optional("name", default=MODE_LABELS.get(mode, "")): TextSelector(),
+            vol.Required("entity_id"): EntitySelector(
+                EntitySelectorConfig(
+                    domain=["sensor", "binary_sensor"] if mode == MODE_ALERT else ["sensor"],
+                )
+            ),
+            vol.Required("segment_id", default=0): NumberSelector(
+                NumberSelectorConfig(
+                    min=0, max=31, step=1, mode=NumberSelectorMode.BOX
+                )
+            ),
+            vol.Required("num_leds", default=30): NumberSelector(
+                NumberSelectorConfig(
+                    min=1, max=1000, step=1, mode=NumberSelectorMode.BOX
+                )
+            ),
+        }
+
+        if renderer_type != RENDERER_ALERT:
+            schema_dict.update(
+                {
+                    vol.Required("floor", default=float(defaults.get("floor", 0))): NumberSelector(
+                        NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=0.1)
+                    ),
+                    vol.Required("ceiling", default=float(defaults.get("ceiling", 100))): NumberSelector(
+                        NumberSelectorConfig(mode=NumberSelectorMode.BOX, step=0.1)
+                    ),
+                    vol.Required("color_low", default=DEFAULT_COLOR_LOW): ColorRGBSelector(),
+                    vol.Required("color_high", default=DEFAULT_COLOR_HIGH): ColorRGBSelector(),
+                    vol.Required("update_interval", default=DEFAULT_UPDATE_INTERVAL): NumberSelector(
+                        NumberSelectorConfig(
+                            min=0.1, max=60.0, step=0.1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="s",
+                        )
+                    ),
+                }
+            )
+
+        if renderer_type == RENDERER_GAUGE:
+            schema_dict[
+                vol.Required("fill_direction", default=FILL_LEFT_TO_RIGHT)
+            ] = SelectSelector(
+                SelectSelectorConfig(
+                    options=FILL_SELECT_OPTIONS,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        if renderer_type == RENDERER_ALERT:
+            schema_dict.update(
+                {
+                    vol.Required("flash_color", default=DEFAULT_FLASH_COLOR): ColorRGBSelector(),
+                    vol.Required("flash_speed", default=2.0): NumberSelector(
+                        NumberSelectorConfig(
+                            min=0.1, max=20.0, step=0.1,
+                            mode=NumberSelectorMode.SLIDER,
+                            unit_of_measurement="Hz",
+                        )
+                    ),
+                    vol.Required("flash_style", default="pulse"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=FLASH_STYLE_SELECT_OPTIONS,
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            )
+
+        return vol.Schema(schema_dict)
+
+    async def _process_viz_input(
+        self,
+        user_input: dict[str, Any],
+        mode: str,
+    ) -> config_entries.ConfigFlowResult:
+        """Validate and store a visualization config from form submission."""
+        defaults = MODE_DEFAULTS.get(mode, {})
+        renderer_type = MODE_RENDERER_MAP.get(mode, RENDERER_GAUGE)
+
+        viz_config: dict[str, Any] = {
+            "name": user_input.get("name") or MODE_LABELS.get(mode, mode),
+            "mode": mode,
+            "renderer_type": renderer_type,
+            "entity_id": user_input["entity_id"],
+            "segment_id": int(user_input.get("segment_id", 0)),
+            "num_leds": int(user_input.get("num_leds", 30)),
+            "floor": float(user_input.get("floor", defaults.get("floor", 0))),
+            "ceiling": float(user_input.get("ceiling", defaults.get("ceiling", 100))),
+            "update_interval": float(user_input.get("update_interval", DEFAULT_UPDATE_INTERVAL)),
+        }
+
+        # ColorRGBSelector returns [R, G, B] directly
+        viz_config["color_low"] = user_input.get("color_low", DEFAULT_COLOR_LOW)
+        viz_config["color_high"] = user_input.get("color_high", DEFAULT_COLOR_HIGH)
+
+        if renderer_type == RENDERER_GAUGE:
+            viz_config["fill_direction"] = user_input.get(
+                "fill_direction", FILL_LEFT_TO_RIGHT
+            )
+        elif renderer_type == RENDERER_ALERT:
+            viz_config["flash_color"] = user_input.get("flash_color", DEFAULT_FLASH_COLOR)
+            viz_config["flash_speed"] = float(user_input.get("flash_speed", 2.0))
+            viz_config["flash_style"] = user_input.get("flash_style", "pulse")
+
+        if self._editing_index is not None:
+            viz_config["id"] = self._visualizations[self._editing_index].get(
+                "id", f"viz_{self._next_viz_id}"
+            )
+            self._visualizations[self._editing_index] = viz_config
+            self._editing_index = None
+        else:
+            viz_config["id"] = f"viz_{self._next_viz_id}"
+            self._next_viz_id += 1
+            self._visualizations.append(viz_config)
+
         return await self.async_step_init()
 
     def _save_and_finish(self) -> config_entries.ConfigFlowResult:
-        """Save visualizations and close."""
+        """Save visualizations and close the options flow."""
         new_data = dict(self._config_entry.data)
         new_data[CONF_VISUALIZATIONS] = self._visualizations
         self.hass.config_entries.async_update_entry(
@@ -352,14 +470,3 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
             data=new_data,
         )
         return self.async_create_entry(title="", data={})
-
-
-def _hex_to_rgb(hex_color: str) -> list[int]:
-    """Convert hex color string to RGB list."""
-    hex_color = hex_color.lstrip("#")
-    if len(hex_color) != 6:
-        return [255, 255, 255]
-    try:
-        return [int(hex_color[i : i + 2], 16) for i in (0, 2, 4)]
-    except ValueError:
-        return [255, 255, 255]

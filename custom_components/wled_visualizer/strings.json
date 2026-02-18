@@ -3,10 +3,14 @@
     "step": {
       "user": {
         "title": "Connect to WLED",
-        "description": "Enter the IP address or hostname of your WLED device.",
+        "description": "Enter the address of your WLED device to get started.",
         "data": {
-          "wled_host": "WLED Host",
+          "wled_host": "Host",
           "wled_port": "Port"
+        },
+        "data_description": {
+          "wled_host": "IP address or hostname of the WLED device",
+          "wled_port": "HTTP port (default 80)"
         }
       }
     },
@@ -22,8 +26,11 @@
       "init": {
         "title": "InfraGlow",
         "description": "Manage your LED visualizations.",
-        "data": {
-          "action": "Action"
+        "menu_options": {
+          "add_viz": "Add a visualization",
+          "edit_viz": "Edit a visualization",
+          "delete_viz": "Remove a visualization",
+          "save": "Save and close"
         }
       },
       "add_viz": {
@@ -33,23 +40,52 @@
           "mode": "Mode"
         }
       },
+      "edit_viz": {
+        "title": "Edit Visualization",
+        "description": "Select a visualization to edit.",
+        "data": {
+          "viz_index": "Visualization"
+        }
+      },
+      "delete_viz": {
+        "title": "Remove Visualization",
+        "description": "Select a visualization to remove.",
+        "data": {
+          "viz_index": "Visualization"
+        }
+      },
       "configure_viz": {
-        "title": "Configure Visualization",
+        "title": "Configure: {mode}",
         "description": "Set up the visualization parameters.",
         "data": {
           "name": "Name",
           "entity_id": "Entity",
-          "segment_id": "WLED Segment ID",
+          "segment_id": "Segment ID",
           "num_leds": "Number of LEDs",
-          "floor": "Floor (minimum value)",
-          "ceiling": "Ceiling (maximum value)",
-          "color_low": "Low Color (hex)",
-          "color_high": "High Color (hex)",
-          "update_interval": "Update Interval (seconds)",
-          "fill_direction": "Fill Direction",
-          "flash_color": "Flash Color (hex)",
-          "flash_speed": "Flash Speed (Hz)",
-          "flash_style": "Flash Style"
+          "floor": "Floor value",
+          "ceiling": "Ceiling value",
+          "color_low": "Low color",
+          "color_high": "High color",
+          "update_interval": "Update interval",
+          "fill_direction": "Fill direction",
+          "flash_color": "Flash color",
+          "flash_speed": "Flash speed",
+          "flash_style": "Flash style"
+        },
+        "data_description": {
+          "name": "A friendly name for this visualization",
+          "entity_id": "The Home Assistant sensor entity to visualize",
+          "segment_id": "WLED segment to render on (set up segments in WLED first)",
+          "num_leds": "How many LEDs are in this segment",
+          "floor": "Sensor value that maps to 0% (empty / low end)",
+          "ceiling": "Sensor value that maps to 100% (full / high end)",
+          "color_low": "LED color when the value is at the floor",
+          "color_high": "LED color when the value is at the ceiling",
+          "update_interval": "How often to refresh (lower = smoother but more traffic)",
+          "fill_direction": "Which direction the gauge bar fills from",
+          "flash_color": "Color of the alert flash",
+          "flash_speed": "How fast the alert pulses",
+          "flash_style": "Animation style for the alert"
         }
       }
     }
