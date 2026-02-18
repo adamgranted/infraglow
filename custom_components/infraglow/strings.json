@@ -23,6 +23,7 @@
   },
   "config_subentries": {
     "visualization": {
+      "entry_type": "Visualization",
       "initiate_flow": {
         "user": "Add visualization",
         "reconfigure": "Edit visualization"

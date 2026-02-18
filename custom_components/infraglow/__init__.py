@@ -28,12 +28,6 @@ from .wled_client import WLEDClient
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
-    """Set up the InfraGlow component."""
-    hass.data.setdefault(DOMAIN, {})
-    return True
-
-
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate config entry from V1 (visualizations list) to V2 (subentries)."""
     if entry.version < 2:
@@ -55,6 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data[CONF_WLED_HOST]
     port = entry.data.get(CONF_WLED_PORT, DEFAULT_PORT)
 
+    hass.data.setdefault(DOMAIN, {})
     _LOGGER.info("Setting up InfraGlow for %s:%d", host, port)
 
     client = WLEDClient(host, port)
