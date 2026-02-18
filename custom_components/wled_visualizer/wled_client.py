@@ -75,14 +75,12 @@ class WLEDClient:
             segment_id: WLED segment ID.
             colors: List of (R, G, B) tuples, one per LED in the segment.
         """
-        # WLED individual LED control format:
-        # {"seg": [{"id": N, "i": [R, G, B, R, G, B, ...]}]}
-        flat_colors: list[int] = []
-        for r, g, b in colors:
-            flat_colors.extend([r, g, b])
-
+        # WLED's "i" array requires non-integer elements (hex strings or
+        # sub-arrays) to be recognized as colors. Flat integers are parsed
+        # as LED indices. Hex strings are the most bandwidth-efficient format.
+        hex_colors = [f"{r:02X}{g:02X}{b:02X}" for r, g, b in colors]
         payload = {
-            "seg": [{"id": segment_id, "i": flat_colors}],
+            "seg": [{"id": segment_id, "i": hex_colors}],
         }
         await self._send_state(payload)
 
@@ -96,14 +94,20 @@ class WLEDClient:
         so the alert animation spans the full strip.
         """
         total = self.get_total_leds()
-        flat_colors: list[int] = []
-        for r, g, b in colors:
-            flat_colors.extend([r, g, b])
-
+        hex_colors = [f"{r:02X}{g:02X}{b:02X}" for r, g, b in colors]
         payload = {
-            "seg": [{"id": 0, "start": 0, "stop": total, "i": flat_colors}],
+            "seg": [{"id": 0, "start": 0, "stop": total, "i": hex_colors}],
         }
         await self._send_state(payload)
+
+    async def prepare_for_control(self) -> None:
+        """Turn WLED on and disable transitions for per-pixel control.
+
+        WLED's default 700ms transition causes sluggish updates when pushing
+        individual LED colors at high frame rates. Setting transition to 0
+        makes color changes instant.
+        """
+        await self._send_state({"on": True, "transition": 0})
 
     async def set_power(self, on: bool) -> None:
         """Turn WLED on or off."""

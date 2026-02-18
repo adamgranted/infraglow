@@ -26,11 +26,8 @@
       "init": {
         "title": "InfraGlow",
         "description": "Manage your LED visualizations.",
-        "menu_options": {
-          "add_viz": "Add a visualization",
-          "edit_viz": "Edit a visualization",
-          "delete_viz": "Remove a visualization",
-          "save": "Save and close"
+        "data": {
+          "action": "Action"
         }
       },
       "add_viz": {

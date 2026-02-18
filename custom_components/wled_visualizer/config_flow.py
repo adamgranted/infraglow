@@ -185,23 +185,37 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Show the main options menu as buttons."""
-        menu_options: list[str] = ["add_viz"]
+        """Show the main options menu."""
+        if user_input is not None:
+            action = user_input.get("action")
+            if action == "add_viz":
+                return await self.async_step_add_viz()
+            if action == "edit_viz":
+                return await self.async_step_edit_viz()
+            if action == "delete_viz":
+                return await self.async_step_delete_viz()
+            if action == "save":
+                return self._save_and_finish()
+
+        options = [{"value": "add_viz", "label": "Add a visualization"}]
         if self._visualizations:
-            menu_options.extend(["edit_viz", "delete_viz"])
-        menu_options.append("save")
+            options.append({"value": "edit_viz", "label": "Edit a visualization"})
+            options.append({"value": "delete_viz", "label": "Remove a visualization"})
+        options.append({"value": "save", "label": "Save and close"})
 
-        return self.async_show_menu(
+        return self.async_show_form(
             step_id="init",
-            menu_options=menu_options,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("action"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=options,
+                            mode=SelectSelectorMode.LIST,
+                        )
+                    ),
+                }
+            ),
         )
-
-    async def async_step_save(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Save all changes and close."""
-        return self._save_and_finish()
 
     # ── Add ───────────────────────────────────────────────────────
 

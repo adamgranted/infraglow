@@ -133,11 +133,11 @@ class VisualizationCoordinator:
                 self._total_leds,
             )
 
-        # Ensure WLED is on
+        # Ensure WLED is on with instant transitions for per-pixel control
         try:
-            await self.wled.set_power(True)
+            await self.wled.prepare_for_control()
         except Exception:
-            _LOGGER.warning("Could not turn on WLED")
+            _LOGGER.warning("Could not prepare WLED for control")
 
         # Create visualization slots
         for i, viz_config in enumerate(visualizations):
@@ -221,7 +221,7 @@ class VisualizationCoordinator:
                         try:
                             await self.wled.set_all_leds(alert_frame)
                         except Exception as err:
-                            _LOGGER.debug("Failed to push alert frame: %s", err)
+                            _LOGGER.warning("Failed to push alert frame: %s", err)
                     self._alert_active = True
                 else:
                     # Normal mode — render each visualization to its segment
@@ -248,7 +248,7 @@ class VisualizationCoordinator:
                         try:
                             await self.wled.set_segment_colors(slot.segment_id, frame)
                         except Exception as err:
-                            _LOGGER.debug(
+                            _LOGGER.warning(
                                 "Failed to push frame for '%s': %s",
                                 slot.viz_id,
                                 err,
