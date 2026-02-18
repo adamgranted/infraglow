@@ -327,8 +327,11 @@ class InfraGlowOptionsFlow(config_entries.OptionsFlow):
         schema = self._build_viz_schema(mode, renderer_type, defaults)
 
         if self._editing_index is not None and self._editing_index < len(self._visualizations):
+            suggested_values = dict(self._visualizations[self._editing_index])
+            if "wled_fx" in suggested_values:
+                suggested_values["wled_fx"] = str(suggested_values["wled_fx"])
             schema = self.add_suggested_values_to_schema(
-                schema, self._visualizations[self._editing_index],
+                schema, suggested_values,
             )
 
         return self.async_show_form(

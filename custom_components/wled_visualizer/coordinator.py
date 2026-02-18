@@ -220,13 +220,22 @@ class VisualizationCoordinator:
                     if self._alert_active:
                         _LOGGER.info("Alert cleared, resuming normal visualizations")
                         self._alert_active = False
+                        # Reset effect renderer state to force re-push after alert
+                        for slot in self._slots.values():
+                            if slot.renderer_type == RENDERER_EFFECT:
+                                slot.renderer._last_state = None
 
                     # --- Normal metric slots ---
                     for slot in self._slots.values():
-                        if now - slot.last_update < slot.update_interval:
-                            continue
+                        # Only throttle non-animated renderers (gauge); flow
+                        # renderers need every frame for smooth animation.
+                        if slot.renderer_type == RENDERER_GAUGE:
+                            if now - slot.last_update < slot.update_interval:
+                                continue
 
                         if slot.renderer_type == RENDERER_EFFECT:
+                            if now - slot.last_update < slot.update_interval:
+                                continue
                             await self._push_effect_slot(slot)
                         else:
                             await self._push_pixel_slot(slot, timestamp)
