@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to WLED",
+        "description": "Enter the IP address or hostname of your WLED device.",
+        "data": {
+          "wled_host": "WLED Host",
+          "wled_port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to WLED device. Check the host and port."
+    },
+    "abort": {
+      "already_configured": "This WLED device is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "InfraGlow",
+        "description": "Manage your LED visualizations.",
+        "data": {
+          "action": "Action"
+        }
+      },
+      "add_viz": {
+        "title": "Add Visualization",
+        "description": "Choose a visualization mode.",
+        "data": {
+          "mode": "Mode"
+        }
+      },
+      "configure_viz": {
+        "title": "Configure Visualization",
+        "description": "Set up the visualization parameters.",
+        "data": {
+          "name": "Name",
+          "entity_id": "Entity",
+          "segment_id": "WLED Segment ID",
+          "num_leds": "Number of LEDs",
+          "floor": "Floor (minimum value)",
+          "ceiling": "Ceiling (maximum value)",
+          "color_low": "Low Color (hex)",
+          "color_high": "High Color (hex)",
+          "update_interval": "Update Interval (seconds)",
+          "fill_direction": "Fill Direction",
+          "flash_color": "Flash Color (hex)",
+          "flash_speed": "Flash Speed (Hz)",
+          "flash_style": "Flash Style"
+        }
+      }
+    }
+  }
+}
