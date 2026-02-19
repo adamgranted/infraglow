@@ -125,3 +125,14 @@ MODE_DEFAULTS = {
 # WLED API
 WLED_API_STATE = "/json/state"
 WLED_API_INFO = "/json/info"
+
+# Frontend
+URL_BASE = "/infraglow"
+
+INFRAGLOW_CARDS = [
+    {
+        "name": "InfraGlow Card",
+        "filename": "infraglow-card.js",
+        "version": "0.1.0",
+    }
+]

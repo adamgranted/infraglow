@@ -23,6 +23,8 @@ from .const import (
     SUBENTRY_TYPE_VISUALIZATION,
 )
 from .coordinator import VisualizationCoordinator
+from .frontend import async_register_frontend
+from .websocket import async_register_websocket_commands
 from .wled_client import WLEDClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,7 +51,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data[CONF_WLED_HOST]
     port = entry.data.get(CONF_WLED_PORT, DEFAULT_PORT)
 
-    hass.data.setdefault(DOMAIN, {})
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+        await async_register_frontend(hass)
+        async_register_websocket_commands(hass)
+
     _LOGGER.info("Setting up InfraGlow for %s:%d", host, port)
 
     client = WLEDClient(host, port)
