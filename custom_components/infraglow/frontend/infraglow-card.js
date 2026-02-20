@@ -22,6 +22,12 @@ const MODE_OPTIONS = [
   { value: "grafana", label: "Grafana / Generic Sensor" },
 ];
 
+const FLASH_STYLE_OPTIONS = [
+  { value: "pulse", label: "Smooth Pulse" },
+  { value: "strobe", label: "Hard Strobe" },
+  { value: "solid", label: "Solid (no animation)" },
+];
+
 const MODE_DEFAULTS = {
   system_load: { floor: 0, ceiling: 100 },
   temperature: { floor: 20, ceiling: 90 },
@@ -29,6 +35,8 @@ const MODE_DEFAULTS = {
   alert:       { floor: 0, ceiling: 1 },
   grafana:     { floor: 0, ceiling: 100 },
 };
+
+const TUPLE_SPREAD = 0.30;
 
 /* -------------------------------------------------------------------- */
 /*  Card Editor                                                         */
@@ -81,7 +89,7 @@ class InfraGlowCard extends LitElement {
   }
 
   static get properties() {
-    return { hass: {}, _config: {}, _vizData: {}, _showCreateForm: {}, _createMode: {} };
+    return { hass: {}, _config: {}, _vizData: {}, _showCreateForm: {}, _createMode: {}, _createData: {} };
   }
 
   setConfig(config) {
@@ -129,7 +137,15 @@ class InfraGlowCard extends LitElement {
           colorLow: saved?.low || viz.color_low || [0, 255, 0],
           colorHigh: saved?.high || viz.color_high || [255, 0, 0],
           isAlert: viz.renderer_type === "alert",
+          rendererType: viz.renderer_type || "effect",
           mode: viz.mode || "",
+          sourceEntity: viz.entity_id || "",
+          segmentId: viz.segment_id ?? 0,
+          numLeds: viz.num_leds ?? 30,
+          updateInterval: viz.update_interval ?? 0.5,
+          flashColor: saved?.flashColor || viz.flash_color || [255, 0, 0],
+          flashSpeed: viz.flash_speed ?? 2.0,
+          flashStyle: viz.flash_style || "pulse",
         };
       });
       this._loaded = true;
@@ -144,8 +160,11 @@ class InfraGlowCard extends LitElement {
   async _reloadConfig() {
     this._loaded = false;
     this._loading = false;
-    await new Promise((r) => setTimeout(r, 2000));
-    await this._loadConfig();
+    for (let i = 0; i < 5; i++) {
+      await new Promise((r) => setTimeout(r, 1500 + i * 500));
+      await this._loadConfig();
+      if (this._vizData?.length) break;
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -153,33 +172,15 @@ class InfraGlowCard extends LitElement {
   /* ------------------------------------------------------------------ */
 
   async _createVisualization() {
-    if (!this._entryId || !this._createMode) return;
-
-    const form = this.shadowRoot?.querySelector(".create-form");
-    const entityPicker = form?.querySelector("ha-entity-picker");
-    const entityId = entityPicker?.value;
-    if (!entityId) return;
-
-    const segInput = form?.querySelector("[data-field='segment_id']");
-    const ledInput = form?.querySelector("[data-field='num_leds']");
-    const nameInput = form?.querySelector("[data-field='name']");
-
-    const params = {
-      entity_id: entityId,
-      segment_id: parseInt(segInput?.value) || 0,
-      num_leds: parseInt(ledInput?.value) || 30,
-      name: nameInput?.value || "",
-    };
-
+    if (!this._entryId || !this._createMode || !this._createData?.entity_id) return;
     try {
       await this.hass.connection.sendMessagePromise({
-        type: "infraglow/create_viz",
-        entry_id: this._entryId,
-        mode: this._createMode,
-        params,
+        type: "infraglow/create_viz", entry_id: this._entryId,
+        mode: this._createMode, params: this._createData,
       });
       this._showCreateForm = false;
       this._createMode = null;
+      this._createData = {};
       await this._reloadConfig();
     } catch (err) {
       console.error("InfraGlow: failed to create viz", err);
@@ -245,59 +246,42 @@ class InfraGlowCard extends LitElement {
   /*  Create form                                                       */
   /* ------------------------------------------------------------------ */
 
+  _getCreateSchema(mode) {
+    const d = mode === "alert" ? ["sensor", "binary_sensor"] : ["sensor"];
+    return [
+      { name: "name", selector: { text: {} } },
+      { name: "entity_id", required: true, selector: { entity: { domain: d } } },
+      { name: "segment_id", selector: { number: { min: 0, max: 31, step: 1, mode: "box" } } },
+      { name: "num_leds", selector: { number: { min: 1, max: 1000, step: 1, mode: "box" } } },
+    ];
+  }
+
+  _createFormLabel(schema) {
+    return { name: "Name", entity_id: "Source Entity", segment_id: "Segment ID", num_leds: "Number of LEDs" }[schema.name] || schema.name;
+  }
+
   _renderCreateForm() {
     const mode = this._createMode;
-    const includeDomains = mode === "alert" ? ["sensor", "binary_sensor"] : ["sensor"];
-
     return html`
       <div class="create-form">
-        <div class="create-header">
-          <span>Add Visualization</span>
-          <ha-icon-button @click=${() => { this._showCreateForm = false; this._createMode = null; this.requestUpdate(); }}>
-            <ha-icon icon="mdi:close"></ha-icon>
-          </ha-icon-button>
-        </div>
-
-        ${!mode ? html`
-          <div class="mode-list">
-            ${MODE_OPTIONS.map((m) => html`
-              <button class="mode-btn" @click=${() => { this._createMode = m.value; this.requestUpdate(); }}>
-                <ha-icon icon=${m.value === "alert" ? "mdi:alert-circle" : "mdi:chart-line"}></ha-icon>
-                ${m.label}
-              </button>
-            `)}
-          </div>
-        ` : html`
-          <div class="create-fields">
-            <div class="field-row">
-              <label>Name</label>
-              <input type="text" data-field="name"
-                placeholder="${MODE_OPTIONS.find((m) => m.value === mode)?.label || ""}" />
-            </div>
-            <div class="field-row">
-              <label>Entity</label>
-              <ha-entity-picker
-                .hass=${this.hass}
-                .includeDomains=${includeDomains}
-                allow-custom-entity
-              ></ha-entity-picker>
-            </div>
-            <div class="field-row">
-              <label>Segment ID</label>
-              <input type="number" data-field="segment_id" value="0" min="0" max="31" />
-            </div>
-            <div class="field-row">
-              <label>LEDs</label>
-              <input type="number" data-field="num_leds" value="30" min="1" max="1000" />
-            </div>
-            <div class="create-actions">
-              <button class="cancel-btn" @click=${() => { this._createMode = null; this.requestUpdate(); }}>Back</button>
-              <button class="submit-btn" @click=${() => this._createVisualization()}>Create</button>
-            </div>
-          </div>
-        `}
-      </div>
-    `;
+        <div class="create-header"><span>Add Visualization</span>
+          <ha-icon-button @click=${() => { this._showCreateForm = false; this._createMode = null; this._createData = {}; this.requestUpdate(); }}>
+            <ha-icon icon="mdi:close"></ha-icon></ha-icon-button></div>
+        ${!mode ? html`<div class="mode-list">
+          ${MODE_OPTIONS.map((m) => html`<button class="mode-btn" @click=${() => {
+            this._createMode = m.value;
+            this._createData = { segment_id: 0, num_leds: 30, ...(MODE_DEFAULTS[m.value] || {}) };
+            this.requestUpdate();
+          }}><ha-icon icon=${m.value === "alert" ? "mdi:alert-circle" : "mdi:chart-line"}></ha-icon> ${m.label}</button>`)}
+        </div>` : html`
+          <ha-form .hass=${this.hass} .data=${this._createData || {}}
+            .schema=${this._getCreateSchema(mode)} .computeLabel=${this._createFormLabel}
+            @value-changed=${(e) => { this._createData = { ...this._createData, ...e.detail.value }; }}></ha-form>
+          <div class="create-actions">
+            <button class="cancel-btn" @click=${() => { this._createMode = null; this._createData = {}; this.requestUpdate(); }}>Back</button>
+            <button class="submit-btn" @click=${() => this._createVisualization()}>Create</button>
+          </div>`}
+      </div>`;
   }
 
   /* ------------------------------------------------------------------ */
@@ -307,26 +291,31 @@ class InfraGlowCard extends LitElement {
   _renderViz(viz) {
     const enabledEid = viz.entities.enabled;
     const isOn = enabledEid && this.hass.states[enabledEid]?.state === "on";
+    const normEid = viz.entities.normalized;
+    const normVal = normEid ? parseFloat(this.hass.states[normEid]?.state) : null;
+    const normPct = normVal !== null && !isNaN(normVal) ? normVal : null;
 
     return html`
       <ha-expansion-panel outlined .header=${viz.name}>
         <div slot="icons" @click=${(e) => e.stopPropagation()}>
-          ${enabledEid ? html`
-            <ha-switch .checked=${isOn}
-              @change=${(e) => this._toggleEntity(enabledEid, e.target.checked)}
-            ></ha-switch>` : ""}
           <ha-icon-button @click=${() => this._deleteVisualization(viz)}>
             <ha-icon icon="mdi:delete-outline"></ha-icon>
           </ha-icon-button>
         </div>
         <div class="viz-section">
+          ${this._renderSourceInfo(viz, enabledEid, isOn)}
+          ${this._renderReading(viz)}
+          ${viz.isAlert ? html`
+            ${this._renderTuples(viz, normPct)}
+            ${this._renderAlertControls(viz)}` : html`
+            ${this._renderGradient(viz, normPct)}
+            ${this._renderTuples(viz, normPct)}
+            ${this._renderColors(viz)}
+            ${this._renderFloorCeiling(viz)}
+            ${this._renderEffect(viz)}
+            ${this._renderSpeed(viz)}
+            ${this._renderToggles(viz)}`}
           ${this._config.show_diagnostics ? this._renderDiagnostics(viz) : ""}
-          ${!viz.isAlert ? this._renderGradient(viz) : ""}
-          ${!viz.isAlert ? this._renderColors(viz) : ""}
-          ${!viz.isAlert ? this._renderFloorCeiling(viz) : ""}
-          ${!viz.isAlert ? this._renderEffect(viz) : ""}
-          ${!viz.isAlert ? this._renderSpeed(viz) : ""}
-          ${!viz.isAlert ? this._renderToggles(viz) : ""}
         </div>
       </ha-expansion-panel>
     `;
@@ -346,10 +335,86 @@ class InfraGlowCard extends LitElement {
     </div>`;
   }
 
-  _renderGradient(viz) {
+  _renderSourceInfo(viz, enabledEid, isOn) {
+    const srcState = viz.sourceEntity ? this.hass.states[viz.sourceEntity] : null;
+    const friendlyName = srcState?.attributes?.friendly_name || viz.sourceEntity || "Unknown";
+    const modeLabel = MODE_OPTIONS.find((m) => m.value === viz.mode)?.label || viz.mode;
+    return html`<div class="source-info">
+      <div class="source-header">
+        <div class="source-header-text">
+          <span class="source-mode">${modeLabel}</span>
+          <span class="source-entity"><ha-icon icon="mdi:link-variant"></ha-icon> ${friendlyName}</span>
+        </div>
+        ${enabledEid ? html`
+          <ha-switch .checked=${isOn}
+            @change=${(e) => this._toggleEntity(enabledEid, e.target.checked)}
+          ></ha-switch>` : ""}
+      </div>
+      <span class="source-meta">Segment ${viz.segmentId} &middot; ${viz.numLeds} LEDs</span>
+    </div>`;
+  }
+
+  _renderReading(viz) {
+    const srcState = viz.sourceEntity ? this.hass.states[viz.sourceEntity] : null;
+    const rawVal = srcState?.state ?? "\u2014";
+    const uom = srcState?.attributes?.unit_of_measurement || "";
+    const normEid = viz.entities.normalized;
+    const normVal = normEid ? parseFloat(this.hass.states[normEid]?.state) : null;
+    const pct = normVal !== null && !isNaN(normVal) ? Math.min(Math.max(normVal, 0), 100) : null;
+
+    let fillStyle = "";
+    if (pct !== null) {
+      const fc = this._gradientColor(pct / 100, viz.colorLow || [0, 255, 0], viz.colorHigh || [255, 0, 0]);
+      fillStyle = `width:${pct}%;background:rgb(${fc[0]},${fc[1]},${fc[2]})`;
+    }
+
+    return html`<div class="reading-display">
+      <span class="reading-value">${rawVal}${uom ? html` <span class="reading-uom">${uom}</span>` : ""}</span>
+      ${pct !== null ? html`
+        <div class="reading-bar"><div class="reading-bar-fill" style=${fillStyle}></div></div>
+        <span class="reading-pct">${normVal.toFixed(1)}%</span>` : ""}
+    </div>`;
+  }
+
+  _renderTuples(viz, normPct) {
+    const tuples = this._computeTuples(viz, normPct);
+    return html`<div class="tuple-row">
+      ${tuples.map((t) => html`
+        <div class="tuple-item">
+          <div class="tuple-swatch" style="background:rgb(${t.color[0]},${t.color[1]},${t.color[2]})"></div>
+          <span class="tuple-label">${t.label}</span>
+          <span class="tuple-rgb">${t.color[0]}, ${t.color[1]}, ${t.color[2]}</span>
+        </div>`)}
+    </div>`;
+  }
+
+  _renderAlertControls(viz) {
+    return html`
+      <div class="color-row">
+        <div class="color-picker"><span class="color-label">Flash Color</span>
+          <input type="color" .value=${this._rgbToHex(viz.flashColor)}
+            @change=${(e) => this._updateWsParam(viz, "flash_color", this._hexToRgb(e.target.value), "flashColor")} /></div>
+      </div>
+      <div class="param-row"><span class="param-label">Speed</span>
+        <ha-control-slider .value=${viz.flashSpeed} min="0.1" max="20" step="0.1"
+          @value-changed=${(e) => this._updateWsParam(viz, "flash_speed", e.detail.value, "flashSpeed")}></ha-control-slider>
+        <span class="speed-val">${viz.flashSpeed} Hz</span></div>
+      <div class="param-row"><span class="param-label">Style</span>
+        <ha-select .value=${viz.flashStyle}
+          @selected=${(e) => { const v = e.target.value; if (v && v !== viz.flashStyle) this._updateWsParam(viz, "flash_style", v, "flashStyle"); }}
+          @closed=${(e) => e.stopPropagation()}>
+          ${FLASH_STYLE_OPTIONS.map((o) => html`<ha-list-item .value=${o.value}>${o.label}</ha-list-item>`)}
+        </ha-select></div>`;
+  }
+
+  _renderGradient(viz, normPct) {
     const [lr, lg, lb] = viz.colorLow || [0, 255, 0];
     const [hr, hg, hb] = viz.colorHigh || [255, 0, 0];
-    return html`<div class="gradient-preview" style="background:linear-gradient(to right,rgb(${lr},${lg},${lb}),rgb(${hr},${hg},${hb}))"></div>`;
+    const pct = normPct !== null && normPct !== undefined ? Math.min(Math.max(normPct, 0), 100) : null;
+    return html`<div class="gradient-container">
+      <div class="gradient-preview" style="background:linear-gradient(to right,rgb(${lr},${lg},${lb}),rgb(${hr},${hg},${hb}))"></div>
+      ${pct !== null ? html`<div class="gradient-marker" style="left:${pct}%"></div>` : ""}
+    </div>`;
   }
 
   _renderColors(viz) {
@@ -365,15 +430,19 @@ class InfraGlowCard extends LitElement {
     const floorEid = viz.entities.floor, ceilEid = viz.entities.ceiling;
     if (!floorEid || !ceilEid) return "";
     const fs = this.hass.states[floorEid], cs = this.hass.states[ceilEid];
+    const floorVal = parseFloat(fs?.state);
+    const ceilVal = parseFloat(cs?.state);
     return html`
       <div class="param-row"><span class="param-label">Floor</span>
-        <ha-control-number-buttons .value=${parseFloat(fs?.state) || 0} .min=${fs?.attributes?.min ?? -1000}
-          .max=${fs?.attributes?.max ?? 10000} .step=${fs?.attributes?.step ?? 0.1}
-          @value-changed=${(e) => this._setNumber(floorEid, e.detail.value)}></ha-control-number-buttons></div>
+        <ha-textfield type="number" .value=${isNaN(floorVal) ? "0" : String(floorVal)}
+          .min=${String(fs?.attributes?.min ?? -1000)} .max=${String(fs?.attributes?.max ?? 10000)}
+          .step=${String(fs?.attributes?.step ?? 0.1)} suffix=${fs?.attributes?.unit_of_measurement || ""}
+          @change=${(e) => this._setNumber(floorEid, parseFloat(e.target.value))}></ha-textfield></div>
       <div class="param-row"><span class="param-label">Ceiling</span>
-        <ha-control-number-buttons .value=${parseFloat(cs?.state) || 100} .min=${cs?.attributes?.min ?? -1000}
-          .max=${cs?.attributes?.max ?? 10000} .step=${cs?.attributes?.step ?? 0.1}
-          @value-changed=${(e) => this._setNumber(ceilEid, e.detail.value)}></ha-control-number-buttons></div>`;
+        <ha-textfield type="number" .value=${isNaN(ceilVal) ? "100" : String(ceilVal)}
+          .min=${String(cs?.attributes?.min ?? -1000)} .max=${String(cs?.attributes?.max ?? 10000)}
+          .step=${String(cs?.attributes?.step ?? 0.1)} suffix=${cs?.attributes?.unit_of_measurement || ""}
+          @change=${(e) => this._setNumber(ceilEid, parseFloat(e.target.value))}></ha-textfield></div>`;
   }
 
   _renderEffect(viz) {
@@ -432,12 +501,74 @@ class InfraGlowCard extends LitElement {
     this.requestUpdate();
   }
 
+  _updateWsParam(viz, param, value, localKey) {
+    this.hass.connection.sendMessagePromise({
+      type: "infraglow/update_viz", entry_id: this._entryId, slot_id: viz.subentryId, param, value,
+    });
+    if (!this._colorState) this._colorState = {};
+    if (!this._colorState[viz.subentryId]) this._colorState[viz.subentryId] = {};
+    if (localKey === "flashColor") this._colorState[viz.subentryId].flashColor = value;
+    viz[localKey] = value;
+    this.requestUpdate();
+  }
+
   _rgbToHex(rgb) {
     if (!Array.isArray(rgb) || rgb.length < 3) return "#00ff00";
     return "#" + rgb.map((c) => Math.max(0, Math.min(255, c || 0)).toString(16).padStart(2, "0")).join("");
   }
   _hexToRgb(hex) {
     return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+  }
+
+  _lerpColor(a, b, t) {
+    t = Math.max(0, Math.min(1, t));
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * t),
+      Math.round(a[1] + (b[1] - a[1]) * t),
+      Math.round(a[2] + (b[2] - a[2]) * t),
+    ];
+  }
+
+  _gradientColor(t, low, high) {
+    return this._lerpColor(low, high, t);
+  }
+
+  _computeTuples(viz, normPct) {
+    if (viz.isAlert) {
+      return [{ label: "Flash", color: viz.flashColor || [255, 0, 0] }];
+    }
+
+    const t = (normPct ?? 0) / 100;
+    const low = viz.colorLow || [0, 255, 0];
+    const high = viz.colorHigh || [255, 0, 0];
+    const primary = this._gradientColor(t, low, high);
+
+    if (viz.rendererType === "effect") {
+      const inclEid = viz.entities.include_black;
+      const includeBlack = inclEid && this.hass.states[inclEid]?.state === "on";
+
+      if (includeBlack) {
+        const tSec = Math.min(1.0, t + TUPLE_SPREAD);
+        const secondary = this._gradientColor(tSec, low, high);
+        return [
+          { label: "Primary", color: primary },
+          { label: "Secondary", color: [0, 0, 0] },
+          { label: "Tertiary", color: secondary },
+        ];
+      }
+
+      const tLo = Math.max(0.0, t - TUPLE_SPREAD);
+      const tHi = Math.min(1.0, t + TUPLE_SPREAD);
+      const secondary = this._gradientColor(tLo, low, high);
+      const tertiary = this._gradientColor(tHi, low, high);
+      return [
+        { label: "Primary", color: primary },
+        { label: "Secondary", color: secondary },
+        { label: "Tertiary", color: tertiary },
+      ];
+    }
+
+    return [{ label: "Color", color: primary }];
   }
 
   /* ------------------------------------------------------------------ */
@@ -460,15 +591,60 @@ class InfraGlowCard extends LitElement {
       ha-expansion-panel { --expansion-panel-content-padding: 0; }
       .viz-section { padding: var(--ig-gap); display: flex; flex-direction: column; gap: var(--ig-gap); }
 
-      /* Diagnostics */
+      /* Source info */
+      .source-info {
+        display: flex; flex-direction: column; gap: 2px;
+        padding: 8px 12px; border-radius: 8px;
+        background: var(--secondary-background-color, rgba(127,127,127,0.08));
+      }
+      .source-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .source-header-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+      .source-mode { font-size: 0.75em; text-transform: uppercase; letter-spacing: 0.5px; color: var(--primary-color); font-weight: 600; }
+      .source-entity { font-size: 0.9em; color: var(--primary-text-color); display: flex; align-items: center; gap: 4px; }
+      .source-entity ha-icon { --mdc-icon-size: 14px; color: var(--secondary-text-color); }
+      .source-meta { font-size: 0.8em; color: var(--secondary-text-color); }
+      .speed-val { font-size: 0.85em; color: var(--secondary-text-color); min-width: 55px; text-align: right; }
+
+      /* Live reading */
+      .reading-display { display: flex; align-items: center; gap: 12px; }
+      .reading-value { font-size: 1.4em; font-weight: 600; color: var(--primary-text-color); min-width: 70px; }
+      .reading-uom { font-size: 0.7em; font-weight: 400; color: var(--secondary-text-color); }
+      .reading-bar { flex: 1; height: 8px; border-radius: 4px; background: var(--divider-color); overflow: hidden; }
+      .reading-bar-fill { height: 100%; border-radius: 4px; transition: width 0.3s ease, background 0.3s ease; }
+      .reading-pct { font-size: 0.9em; color: var(--secondary-text-color); min-width: 48px; text-align: right; }
+
+      /* Color tuples */
+      .tuple-row { display: flex; gap: 16px; justify-content: center; }
+      .tuple-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+      .tuple-swatch {
+        width: 28px; height: 28px; border-radius: 50%;
+        border: 2px solid var(--divider-color);
+        transition: background 0.3s ease;
+      }
+      .tuple-label {
+        font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.5px;
+        color: var(--secondary-text-color);
+      }
+      .tuple-rgb { font-size: 0.7em; color: var(--secondary-text-color); font-family: monospace; }
+
+      /* Diagnostics (debug) */
       .live-value { display: flex; align-items: center; gap: 12px; }
       .value-text { font-size: 1.4em; font-weight: 600; color: var(--primary-text-color); min-width: 60px; text-align: center; }
       .bar-container { flex: 1; height: 8px; border-radius: 4px; background: var(--divider-color); overflow: hidden; }
       .bar-fill { height: 100%; border-radius: 4px; background: var(--primary-color); transition: width 0.3s ease; }
       .norm-text { font-size: 0.9em; color: var(--secondary-text-color); min-width: 48px; text-align: right; }
 
-      /* Gradient & colors */
+      /* Gradient with marker */
+      .gradient-container { position: relative; padding: 4px 0; }
       .gradient-preview { height: 8px; border-radius: 4px; }
+      .gradient-marker {
+        position: absolute; top: 0; width: 3px; height: 16px;
+        background: var(--primary-text-color); border-radius: 1.5px;
+        transform: translateX(-50%); transition: left 0.3s ease;
+        box-shadow: 0 0 3px rgba(0,0,0,0.3);
+      }
+
+      /* Colors */
       .color-row { display: flex; gap: 24px; }
       .color-picker { display: flex; flex-direction: column; align-items: center; gap: 4px; }
       .color-label { font-size: 0.8em; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: 0.5px; }
@@ -485,7 +661,7 @@ class InfraGlowCard extends LitElement {
       .param-label { min-width: 100px; font-size: 0.95em; color: var(--primary-text-color); }
       .param-row ha-select { flex: 1; }
       .param-row ha-control-slider { flex: 1; }
-      .param-row ha-control-number-buttons { flex: 1; }
+      .param-row ha-textfield { flex: 1; }
 
       /* Toggles */
       .toggle-row { display: flex; flex-wrap: wrap; gap: 16px; }
