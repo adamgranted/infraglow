@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://github.com/adamgranted/infraglow">
-    <img src="custom_components/infraglow/icon@2x.png" alt="InfraGlow Logo" height="80px" width="80px"/>
+    <img src="custom_components/infraglow/brand/icon@2x.png" alt="InfraGlow Logo" height="80px" width="80px"/>
   </a>
   <h2>InfraGlow</h2>
   <p align="center">
