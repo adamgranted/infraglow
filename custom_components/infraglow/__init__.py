@@ -50,11 +50,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     port = entry.data.get(CONF_WLED_PORT, DEFAULT_PORT)
 
     if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
         from .frontend import async_register_frontend
         from .websocket import async_register_websocket_commands
         await async_register_frontend(hass)
         async_register_websocket_commands(hass)
+        hass.data[DOMAIN] = {}
 
     _LOGGER.info("Setting up InfraGlow for %s:%d", host, port)
 
