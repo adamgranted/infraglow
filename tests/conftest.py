@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -23,8 +22,3 @@ def effect_config() -> dict[str, Any]:
         "mirror": False,
         "reverse": False,
     }
-
-
-@pytest.fixture
-def mock_send_state() -> AsyncMock:
-    return AsyncMock()
