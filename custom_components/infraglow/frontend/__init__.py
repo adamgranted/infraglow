@@ -23,10 +23,14 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     except RuntimeError:
         _LOGGER.debug("InfraGlow static path already registered")
 
-    if hass.data["lovelace"].mode != "storage":
+    lovelace_data = hass.data["lovelace"]
+    mode = getattr(lovelace_data, "resource_mode", None) or getattr(
+        lovelace_data, "mode", None
+    )
+    if mode != "storage":
         return
 
-    resources = hass.data["lovelace"].resources
+    resources = lovelace_data.resources
 
     async def _register_when_ready(now):
         if not resources.loaded:
