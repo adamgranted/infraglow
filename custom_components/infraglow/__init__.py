@@ -23,8 +23,6 @@ from .const import (
     SUBENTRY_TYPE_VISUALIZATION,
 )
 from .coordinator import VisualizationCoordinator
-from .frontend import async_register_frontend
-from .websocket import async_register_websocket_commands
 from .wled_client import WLEDClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,6 +51,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
+        from .frontend import async_register_frontend
+        from .websocket import async_register_websocket_commands
         await async_register_frontend(hass)
         async_register_websocket_commands(hass)
 
