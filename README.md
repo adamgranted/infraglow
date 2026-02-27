@@ -16,6 +16,11 @@
     </a>
   </p>
 
+  <br>
+
+  > [!WARNING] WORK IN PROGRESS
+  >  **This project is under active development. Expect breaking changes, incomplete features, and rough edges.**
+
 </div>
 
 
