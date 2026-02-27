@@ -2,12 +2,27 @@ name: Validate
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install -e ".[test]"
+      - name: Run pytest
+        run: pytest tests/ --tb=short -q
+
   validate-hacs:
     name: HACS Validation
     runs-on: ubuntu-latest

@@ -14,6 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install -e ".[test]"
+
+      - name: Run pytest
+        run: pytest tests/ --tb=short -q
+
       - name: Extract version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
@@ -27,7 +37,13 @@ jobs:
             exit 1
           fi
 
+      - name: Package integration zip
+        run: |
+          cd custom_components/infraglow
+          zip -r ../../infraglow.zip .
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          files: infraglow.zip
